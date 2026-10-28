@@ -1,0 +1,10 @@
+[project]
+name = "academia-voicebot-audio"
+version = "0.1.0"
+description = "Academia AI Voice Bot - W1 audio foundation"
+requires-python = ">=3.10"
+dependencies = []  # stdlib only
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
