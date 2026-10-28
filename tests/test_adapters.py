@@ -114,3 +114,24 @@ class TestFakeTranscriber:
         transcriber = FakeTranscriber()
         with pytest.raises(ValueError):
             transcriber.start_session("   ")
+
+    def test_w1_mock_microphone_chunk_compatibility(self):
+        """Transcriber seamlessly processes AudioChunk objects from academia_audio (W1)."""
+        from academia_audio import MockMicrophone
+
+        mic = MockMicrophone(duration_s=0.1, chunk_ms=20)
+        chunks = list(mic.stream())
+        assert len(chunks) == 5
+
+        transcriber = FakeTranscriber(canned_transcript="Testing academia audio integration")
+        events = list(transcriber.transcribe_stream(chunks, session_id="sess_w1"))
+        assert len(events) >= 2
+        assert events[0].event_type == TranscriptEventType.START
+        assert events[-1].event_type == TranscriptEventType.COMPLETE
+
+    def test_reject_invalid_chunk_type(self):
+        transcriber = FakeTranscriber()
+        transcriber.start_session("sess_type_err")
+        with pytest.raises(TypeError):
+            transcriber.process_chunk(12345)  # type: ignore
+

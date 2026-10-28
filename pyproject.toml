@@ -1,10 +1,18 @@
 [project]
 name = "academia-voicebot-audio"
 version = "0.1.0"
-description = "Academia AI Voice Bot - W1 audio foundation"
+description = "Academia AI Voice Bot - W1 audio & W2 STT foundation"
 requires-python = ">=3.10"
-dependencies = []  # stdlib only
+dependencies = [
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "src"]
+

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 Tests for Day 1-2: Transcript Schemas (TranscriptSegment, TranscriptEvent, etc.)
 """
@@ -250,8 +249,11 @@ class TestTranscriptEventSchema:
                 timestamp=1700000005.0,
             )
         assert "must have an 'error' payload" in str(exc.value)
-=======
-import pytest
+
+
+# ==============================================================================
+# Tests for W1: Audio Schemas (AudioFormat, AudioChunk, AudioError, etc.)
+# ==============================================================================
 
 from academia_audio import AudioChunk, AudioError, AudioErrorCode, AudioFormat, assert_stream_order
 from academia_audio.schemas import crc32
@@ -375,4 +377,4 @@ def test_stream_order_ok_and_violations():
     assert code_of(e) == AudioErrorCode.OUT_OF_ORDER
     with pytest.raises(AudioError):
         assert_stream_order([a, a])
->>>>>>> origin/rishi
+
