@@ -1,24 +1,10 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "sde4-stt"
+name = "academia-voicebot-audio"
 version = "0.1.0"
-description = "SDE 4 - Speech-to-Text (W2) Foundation for Academia AI Voice Co-Pilot"
-readme = "README.md"
+description = "Academia AI Voice Bot - W1 audio foundation"
 requires-python = ">=3.10"
-dependencies = [
-    "pydantic>=2.0.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-]
+dependencies = []  # stdlib only
 
 [tool.pytest.ini_options]
-minversion = "7.0"
 testpaths = ["tests"]
-pythonpath = ["src"]
-addopts = "-ra -q"
+pythonpath = ["."]
