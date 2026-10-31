@@ -125,3 +125,23 @@ footer {
   margin: 6px 0 0;
   color: #34314a;
 }
+.skip-link {
+  position: absolute;
+  top: -50px;
+  left: 10px;
+  background: #ffffff;
+  color: #111827;
+  padding: 10px 16px;
+  border: 2px solid #2563eb;
+  border-radius: 6px;
+  z-index: 1000;
+}
+
+.skip-link:focus {
+  top: 10px;
+}
+
+:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}

@@ -2,21 +2,15 @@
 import { useState } from 'react'
 import './App.css'
 import { getMockSession } from './api/sessionApi'
+import SessionControls from './components/SessionControls'
+import MicrophonePermission from './components/MicrophonePermission'
+import TranscriptTimeline, { type TranscriptEvent } from './components/TranscriptTimeline'
 
 type SessionStatus = 'Idle' | 'Running' | 'Paused' | 'Stopped'
 type MicrophoneStatus = 'Prompt' | 'Granted' | 'Denied' | 'Unsupported'
 
-type TranscriptEvent = {
-  id: number
-  timestamp: string
-  text: string
-}
 
-const fixtureEvents: TranscriptEvent[] = [
-  { id: 1, timestamp: '10:00:01', text: 'Welcome to the demo session.' },
-  { id: 2, timestamp: '10:00:03', text: 'The mock transcript is working.' },
-  { id: 3, timestamp: '10:00:05', text: 'Session completed successfully.' },
-]
+
 
 
 function App() {
@@ -65,7 +59,12 @@ async function loadMockTranscript() {
   }
 
   return (
-    <main className="app">
+    <>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+
+      <main className="app" id="main-content">
       <header className="header">
         <div>
           <h1>Session Studio</h1>
@@ -78,74 +77,31 @@ async function loadMockTranscript() {
         Mock mode is enabled. No real audio is uploaded.
       </section>
 
-      <section className="panel">
-        <h2>Session Controls</h2>
-        <p>Session status: <strong>{status}</strong></p>
-        <div className="buttons">
-          <button
-            onClick={() => setStatus('Running')}
-            disabled={status === 'Running'}
-          >
-            Start Session
-          </button>
-          <button
-            onClick={() => setStatus('Paused')}
-            disabled={status !== 'Running'}
-          >
-            Pause Session
-          </button>
-          <button
-            onClick={() => setStatus('Stopped')}
-            disabled={status === 'Idle' || status === 'Stopped'}
-          >
-            Stop Session
-          </button>
-        </div>
-      </section>
+      <SessionControls status={status} setStatus={setStatus} />
+  
+        
 
-      <section className="panel">
-        <h2>Microphone Permission</h2>
-        <p>
-          Permission status: <strong>{micStatus}</strong>
-        </p>
-        <p className="muted" role="status">{micMessage}</p>
-        <button onClick={requestMicrophone}>
-          Request Microphone Permission
-        </button>
-      </section>
+      <MicrophonePermission
+  status={micStatus}
+  message={micMessage}
+  onRequest={requestMicrophone}
+/>
 
       
 
-<section className="panel">
-  <h2>Transcript Timeline</h2>
-  <p className="muted">
-    Mock session transcript events displayed in timestamp order.
-  </p>
+<TranscriptTimeline
+  events={transcriptEvents}
+  apiError={apiError}
+  onLoad={loadMockTranscript}
+/>
 
-  <button type="button" onClick={loadMockTranscript}>
-    Load Mock Transcript
-  </button>
-
-  {apiError && <p role="alert">{apiError}</p>}
-
-  {transcriptEvents.length === 0 ? (
-    <p>No transcript loaded yet. Click the button to load mock events.</p>
-  ) : (
-    <ol className="timeline">
-      {transcriptEvents.map((event) => (
-        <li key={event.id} className="timeline-event">
-          <time>{event.timestamp}</time>
-          <p>{event.text}</p>
-        </li>
-      ))}
-    </ol>
-  )}
-</section>
+  
 
 
-      <footer>Team SDE 4 | Workstream W6 – Frontend and UX</footer>
-    </main>
-  )
-}
+         <footer>Team SDE 4 | Workstream W6 – Frontend and UX</footer>
+      </main>
+    </>
+  ) 
+ }
 
 export default App
