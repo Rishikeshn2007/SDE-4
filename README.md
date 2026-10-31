@@ -1,32 +1,68 @@
-# React + TypeScript + Vite
+# Session Studio
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+**Team SDE 4 – Workstream W6: Frontend and UX**
 
-Currently, two official plugins are available:
+## Project Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Session Studio is an accessible frontend dashboard for managing voice sessions in mock mode. It demonstrates session controls, microphone permission states, and a transcript timeline using mock fixture data.
 
-## React Compiler
+Mock mode is enabled by default. No real audio is recorded or uploaded.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Features
 
-## Expanding the Oxlint configuration
+- Accessible application layout with a skip link.
+- Mock-mode status banner.
+- Session controls: Start, Pause, and Stop.
+- Microphone permission states.
+- Mock transcript timeline.
+- Typed API client with mock responses.
+- API error handling.
+- Component-based React architecture.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Technologies Used
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+- React
+- TypeScript
+- Vite
+- Vitest
+- React Testing Library
+- CSS
+
+## Project Setup
+
+Install dependencies:
+
+```bash
+npm.cmd install
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Start the development server:
+
+```bash
+npm.cmd run dev
+```
+
+## Running Tests
+
+```bash
+npm.cmd test
+```
+
+## Production Build
+
+```bash
+npm.cmd run build
+```
+
+## Testing
+
+The project includes tests for:
+
+- Mock session API responses.
+- Transcript event timestamp ordering.
+- Application heading.
+- Mock-mode banner.
+
+## Important Note
+
+This is a frontend mock-mode demonstration. Microphone permission is requested only to demonstrate browser permission states. The microphone stream is stopped immediately, and no audio is recorded or uploaded.
