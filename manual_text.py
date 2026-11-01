@@ -47,7 +47,7 @@ except ImportError:
 from sde4_stt.accumulator import SegmentAccumulator
 from sde4_stt.adapters.fake_transcriber import FakeTranscriber
 from sde4_stt.adapters.real_transcriber import RealSpeechTranscriber
-from sde4_stt.schemas.audio import AudioChunk
+from sde4_stt.schemas import AudioChunk, AudioFormat
 from sde4_stt.schemas.transcript import TranscriptEventType
 
 
@@ -72,7 +72,7 @@ def main() -> int:
         default="real",
         help="Transcriber engine: 'real' (actual spoken words) or 'mock' (canned text). Default: 'real'",
     )
-    parser.add_argument("--seconds", type=float, default=10.0, help="Recording time in seconds (default: 10.0)")
+    parser.add_argument("--seconds", "--duration", type=float, default=10.0, help="Recording time in seconds (default: 10.0). Alias: --duration")
     parser.add_argument("--chunk-ms", type=int, default=200, help="Chunk length in milliseconds (default: 200)")
     parser.add_argument("--sample-rate", type=int, default=16000, help="Sample rate in Hz (default: 16000)")
     parser.add_argument("--device", type=int, default=None, help="Input device ID (optional)")
@@ -159,15 +159,18 @@ def main() -> int:
                 meter = "#" * bar_len + " " * (25 - bar_len)
                 status = "SPEAKING" if is_speech else "LISTENING"
 
-                # Package into typed AudioChunk
-                chunk_obj = AudioChunk(
-                    chunk_id=f"chunk_{chunks_processed:04d}",
-                    data=data,
-                    sequence_number=chunks_processed,
+                # Package into typed AudioChunk (W1 schema from academia_audio)
+                audio_format = AudioFormat(
                     sample_rate=sample_rate,
                     channels=channels,
-                    duration_seconds=args.chunk_ms / 1000.0,
-                    is_last=False,
+                    sample_width=2,  # 16-bit PCM = 2 bytes per sample
+                )
+                elapsed_s = chunks_processed * (args.chunk_ms / 1000.0)
+                chunk_obj = AudioChunk(
+                    sequence_id=chunks_processed,
+                    timestamp_s=elapsed_s,
+                    format=audio_format,
+                    data=data,
                 )
 
                 # Process chunk through STT pipeline

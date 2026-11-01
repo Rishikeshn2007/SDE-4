@@ -7,6 +7,30 @@
 
 ---
 
+## Quick Start
+
+```bash
+# 1. Clone and enter the project
+git clone <repo-url>
+cd SDE-4
+
+# 2. Create a virtual environment (recommended)
+python -m venv venv
+.\venv\Scripts\activate    # Windows PowerShell
+# source venv/bin/activate  # Linux/Mac
+
+# 3. Install core dependencies (mock mode — no API keys needed)
+pip install -e .
+
+# 4. Run the test suite (should show 97 passed)
+python -m pytest -q
+
+# 5. (Optional) Install real-microphone dependencies
+pip install -e .[real]
+```
+
+---
+
 ## Architecture & Contract Overview
 
 The speech-to-text pipeline serves as the auditory foundation for the Academia AI Voice Co-Pilot. It consumes raw audio chunks and streams structured, validated transcription events into the system.
@@ -147,8 +171,35 @@ Demonstrates:
 2. End-to-end vertical slice integrating W1 `academia_audio.MockMicrophone` with W2 `FakeTranscriber` and `SegmentAccumulator`.
 
 ```bash
+# Run the demo script (mock mode — no API key, no microphone needed)
 python demo_stt.py
 ```
+
+### Live Demo (Real Microphone)
+`manual_text.py` captures live audio from your laptop microphone and streams it through the STT pipeline.
+
+**Install optional dependencies first:**
+```bash
+pip install -e .[real]   # pulls SpeechRecognition, sounddevice
+```
+
+**Usage:**
+```bash
+# Real speech-to-text (transcribes what you ACTUALLY speak):
+python manual_text.py --engine real --seconds 10
+
+# Mock mode (deterministic fake transcriber, no mic needed):
+python manual_text.py --engine mock --seconds 5
+
+# List available audio input devices:
+python manual_text.py --list-devices
+
+# Use a specific microphone device:
+python manual_text.py --engine real --device 1 --seconds 10
+```
+
+> **Note:** The `--engine mock` path requires only `pydantic` (installed with `pip install -e .`).
+> The `--engine real` path additionally needs `SpeechRecognition` and `sounddevice` (installed with `pip install -e .[real]`).
 
 ---
 

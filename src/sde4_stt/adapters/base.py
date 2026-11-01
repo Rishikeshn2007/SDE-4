@@ -8,7 +8,7 @@ Orchestrator layers from specific third-party provider APIs.
 
 from abc import ABC, abstractmethod
 from typing import Iterable, Iterator, List, Optional, Union
-from sde4_stt.schemas.audio import AudioChunk
+from academia_audio.schemas import AudioChunk
 from sde4_stt.schemas.transcript import TranscriptEvent
 
 
@@ -18,7 +18,7 @@ class BaseTranscriberAdapter(ABC):
 
     Enforces a consistent lifecycle contract:
     1. `start_session(session_id, language, ...)` -> Emits START event.
-    2. `process_chunk(chunk)` -> Emits 0 or more INTERIM / FINAL events.
+    2. `process_chunk(chunk, is_last=False)` -> Emits 0 or more INTERIM / FINAL events.
     3. `finish_session()` -> Emits remaining FINAL and/or COMPLETE events.
 
     Also provides high-level generator utility `transcribe_stream()`.
@@ -68,12 +68,14 @@ class BaseTranscriberAdapter(ABC):
     def process_chunk(
         self,
         chunk: Union[AudioChunk, bytes],
+        is_last: bool = False,
     ) -> List[TranscriptEvent]:
         """
         Ingests a single audio chunk and returns zero or more transcript events.
 
         Args:
             chunk: AudioChunk instance or raw PCM/WAV audio bytes.
+            is_last: Optional flag indicating if this is the last chunk of speech.
 
         Returns:
             List of generated TranscriptEvent objects (e.g. INTERIM or FINAL).
