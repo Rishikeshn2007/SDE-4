@@ -3,20 +3,18 @@ Unit tests for Day 3-4: BaseTranscriberAdapter and Deterministic FakeTranscriber
 """
 
 import pytest
-from academia_audio import AudioChunk, AudioFormat
 from sde4_stt.adapters.fake_transcriber import FakeTranscriber
+from sde4_stt.schemas.audio import AudioChunk
 from sde4_stt.schemas.transcript import TranscriptEventType
-
-FMT = AudioFormat(16000, 1)
 
 
 class TestFakeTranscriber:
     def test_determinism_identical_runs_produce_identical_events(self):
         """Guarantee: same input chunks -> 100% identical transcript events."""
         chunks = [
-            AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x01\x00" * 4000),
-            AudioChunk(sequence_id=1, timestamp_s=0.25, format=FMT, data=b"\x02\x00" * 4000),
-            AudioChunk(sequence_id=2, timestamp_s=0.5, format=FMT, data=b"\x03\x00" * 4000),
+            AudioChunk(chunk_id="c1", data=b"chunk_one_pcm_data_001", sequence_number=0, duration_seconds=0.5),
+            AudioChunk(chunk_id="c2", data=b"chunk_two_pcm_data_002", sequence_number=1, duration_seconds=0.5),
+            AudioChunk(chunk_id="c3", data=b"chunk_three_pcm_data_003", sequence_number=2, duration_seconds=0.5, is_last=True),
         ]
 
         transcriber_a = FakeTranscriber(canned_transcript="Why is this code failing")
@@ -49,15 +47,15 @@ class TestFakeTranscriber:
         assert start_events[0].event_type == TranscriptEventType.START
 
         # 2. Chunk 1 (interim)
-        chunk1 = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x01\x00" * 8000)
+        chunk1 = AudioChunk(chunk_id="c1", data=b"audio_bytes_1", sequence_number=0, duration_seconds=1.0)
         c1_events = transcriber.process_chunk(chunk1)
         assert len(c1_events) == 1
         assert c1_events[0].event_type == TranscriptEventType.INTERIM
         assert not c1_events[0].segment.is_final
 
         # 3. Chunk 2 (last chunk -> emits FINAL + COMPLETE)
-        chunk2 = AudioChunk(sequence_id=1, timestamp_s=1.0, format=FMT, data=b"\x02\x00" * 8000)
-        c2_events = transcriber.process_chunk(chunk2, is_last=True)
+        chunk2 = AudioChunk(chunk_id="c2", data=b"audio_bytes_2", sequence_number=1, duration_seconds=1.0, is_last=True)
+        c2_events = transcriber.process_chunk(chunk2)
         assert len(c2_events) == 2
         assert c2_events[0].event_type == TranscriptEventType.FINAL
         assert c2_events[0].segment.is_final is True
@@ -69,7 +67,7 @@ class TestFakeTranscriber:
         transcriber = FakeTranscriber(canned_transcript="Run unit tests")
         transcriber.start_session("sess_002")
         
-        chunk = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x01\x00" * 6400)
+        chunk = AudioChunk(chunk_id="c1", data=b"audio_slice", sequence_number=0, duration_seconds=0.8, is_last=False)
         interim = transcriber.process_chunk(chunk)
         assert interim[0].event_type == TranscriptEventType.INTERIM
 
@@ -96,11 +94,11 @@ class TestFakeTranscriber:
         transcriber = FakeTranscriber(fail_at_chunk_index=1, error_code="MIC_DISCONNECTED")
         transcriber.start_session("sess_err")
 
-        chunk0 = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x01\x00" * 4000)
+        chunk0 = AudioChunk(chunk_id="c0", data=b"chunk_0_ok", sequence_number=0, duration_seconds=0.5)
         evts0 = transcriber.process_chunk(chunk0)
         assert evts0[0].event_type == TranscriptEventType.INTERIM
 
-        chunk1 = AudioChunk(sequence_id=1, timestamp_s=0.25, format=FMT, data=b"\x02\x00" * 4000)
+        chunk1 = AudioChunk(chunk_id="c1", data=b"chunk_1_fail", sequence_number=1, duration_seconds=0.5)
         evts1 = transcriber.process_chunk(chunk1)
         assert len(evts1) == 1
         assert evts1[0].event_type == TranscriptEventType.ERROR
@@ -136,3 +134,4 @@ class TestFakeTranscriber:
         transcriber.start_session("sess_type_err")
         with pytest.raises(TypeError):
             transcriber.process_chunk(12345)  # type: ignore
+

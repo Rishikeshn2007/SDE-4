@@ -9,14 +9,10 @@ Requires no paid API keys.
 
 import time
 from typing import List, Optional, Union
+import speech_recognition as sr
 
-try:
-    import speech_recognition as sr
-except ImportError:
-    sr = None
-
-from academia_audio.schemas import AudioChunk
 from sde4_stt.adapters.base import BaseTranscriberAdapter
+from sde4_stt.schemas.audio import AudioChunk
 from sde4_stt.schemas.transcript import (
     TranscriptError,
     TranscriptEvent,
@@ -40,12 +36,6 @@ class RealSpeechTranscriber(BaseTranscriberAdapter):
         sample_rate: int = 16000,
         sample_width: int = 2,  # 16-bit PCM
     ):
-        if sr is None:
-            raise ImportError(
-                "SpeechRecognition is required for RealSpeechTranscriber. "
-                "Install it with: pip install .[real] or pip install SpeechRecognition"
-            )
-
         super().__init__(provider_name="real-speech-recognizer")
         self._language = language
         self._sample_rate = sample_rate
@@ -84,7 +74,6 @@ class RealSpeechTranscriber(BaseTranscriberAdapter):
     def process_chunk(
         self,
         chunk: Union[AudioChunk, bytes],
-        is_last: bool = False,
     ) -> List[TranscriptEvent]:
         """Buffers audio chunks and emits interim status."""
         if not self._is_active or self._session_id is None:

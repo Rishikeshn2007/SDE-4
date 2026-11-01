@@ -1,6 +1,5 @@
-"""Transcript schemas and re-export of W1 audio contracts."""
+"""Transcript and audio schemas export."""
 
-from academia_audio.schemas import AudioChunk, AudioFormat, AudioError, AudioErrorCode
 from sde4_stt.schemas.transcript import (
     TranscriptEventType,
     WordTiming,
@@ -8,15 +7,13 @@ from sde4_stt.schemas.transcript import (
     TranscriptError,
     TranscriptEvent,
 )
+from sde4_stt.schemas.audio import AudioChunk
 
 __all__ = [
-    "AudioChunk",
-    "AudioFormat",
-    "AudioError",
-    "AudioErrorCode",
     "TranscriptEventType",
     "WordTiming",
     "TranscriptSegment",
     "TranscriptError",
     "TranscriptEvent",
+    "AudioChunk",
 ]

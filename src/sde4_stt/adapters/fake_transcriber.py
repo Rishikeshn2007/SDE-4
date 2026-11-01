@@ -9,7 +9,7 @@ Key guarantee: Identical inputs (audio chunks + session_id) yield identical, det
 import hashlib
 from typing import List, Optional, Union
 from sde4_stt.adapters.base import BaseTranscriberAdapter
-from academia_audio.schemas import AudioChunk
+from sde4_stt.schemas.audio import AudioChunk
 from sde4_stt.schemas.transcript import (
     TranscriptError,
     TranscriptEvent,
@@ -93,18 +93,21 @@ class FakeTranscriber(BaseTranscriberAdapter):
     def process_chunk(
         self,
         chunk: Union[AudioChunk, bytes],
-        is_last: bool = False,
     ) -> List[TranscriptEvent]:
         """Processes an audio chunk and deterministically produces transcript events."""
         if not self._is_active or self._session_id is None:
             raise RuntimeError("Cannot process chunks without an active session. Call start_session() first.")
 
-        # Extract bytes, sequence number, and duration (supporting W1 AudioChunk, duck-typed chunks, and raw bytes)
+        # Extract bytes, sequence number, and duration (supporting W2 AudioChunk, W1 AudioChunk, and raw bytes)
         if isinstance(chunk, AudioChunk):
             chunk_bytes = chunk.data
-            seq = chunk.sequence_id
-            chunk_duration = chunk.duration_s
-            is_last = is_last or getattr(chunk, "is_last", False)
+            seq = chunk.sequence_number
+            chunk_duration = (
+                chunk.duration_seconds
+                if chunk.duration_seconds is not None
+                else len(chunk_bytes) / (chunk.sample_rate * chunk.channels * 2)
+            )
+            is_last = chunk.is_last
         elif hasattr(chunk, "data") and isinstance(chunk.data, (bytes, bytearray)):
             chunk_bytes = bytes(chunk.data)
             seq = getattr(chunk, "sequence_id", getattr(chunk, "sequence_number", self._chunk_count))
@@ -115,12 +118,12 @@ class FakeTranscriber(BaseTranscriberAdapter):
                     chunk_duration = len(chunk_bytes) / (fmt.sample_rate * fmt.channels * 2)
                 else:
                     chunk_duration = len(chunk_bytes) / float(self._bytes_per_second)
-            is_last = is_last or getattr(chunk, "is_last", False)
+            is_last = getattr(chunk, "is_last", False)
         elif isinstance(chunk, (bytes, bytearray)):
             chunk_bytes = bytes(chunk)
             seq = self._chunk_count
             chunk_duration = len(chunk_bytes) / float(self._bytes_per_second)
-            is_last = is_last
+            is_last = False
         else:
             raise TypeError(f"Unsupported audio chunk type: {type(chunk).__name__}. Must be AudioChunk or bytes.")
 
