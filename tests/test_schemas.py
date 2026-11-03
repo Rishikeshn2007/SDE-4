@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 
 from workflow.schemas import WorkflowPlan, WorkflowStep
 from workflow.executor import validate_plan
@@ -44,3 +44,34 @@ class TestSchemas(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class TestAdditionalInvalidPlans(unittest.TestCase):
+
+    def test_blank_plan_id_rejected(self):
+        plan = WorkflowPlan(
+            plan_id=" ",
+            steps=[WorkflowStep("s1", "mock_calculator")]
+        )
+        with self.assertRaises(ValueError):
+            validate_plan(plan)
+
+    def test_blank_step_id_rejected(self):
+        plan = WorkflowPlan(
+            plan_id="valid",
+            steps=[WorkflowStep(" ", "mock_calculator")]
+        )
+        with self.assertRaises(ValueError):
+            validate_plan(plan)
+
+    def test_invalid_inputs_type_rejected(self):
+        plan = WorkflowPlan(
+            plan_id="valid",
+            steps=[
+                WorkflowStep(
+                    "s1",
+                    "mock_calculator",
+                    inputs=["not", "a", "dictionary"]
+                )
+            ],
+        )
+        with self.assertRaises(ValueError):
+            validate_plan(plan)

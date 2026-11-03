@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 
 from workflow.schemas import WorkflowState
 from workflow.state_machine import transition
@@ -25,3 +25,32 @@ class TestStateMachine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class TestAdditionalIllegalTransitions(unittest.TestCase):
+
+    def test_succeeded_cannot_return_to_draft(self):
+        with self.assertRaises(ValueError):
+            transition(
+                WorkflowState.SUCCEEDED,
+                WorkflowState.DRAFT
+            )
+
+    def test_failed_cannot_return_to_running(self):
+        with self.assertRaises(ValueError):
+            transition(
+                WorkflowState.FAILED,
+                WorkflowState.RUNNING
+            )
+
+    def test_cancelled_cannot_return_to_running(self):
+        with self.assertRaises(ValueError):
+            transition(
+                WorkflowState.CANCELLED,
+                WorkflowState.RUNNING
+            )
+
+    def test_draft_cannot_succeed_directly(self):
+        with self.assertRaises(ValueError):
+            transition(
+                WorkflowState.DRAFT,
+                WorkflowState.SUCCEEDED
+            )
