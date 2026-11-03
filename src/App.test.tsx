@@ -1,6 +1,6 @@
 
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import App from './App'
 
 describe('Session Studio', () => {
@@ -8,7 +8,10 @@ describe('Session Studio', () => {
     render(<App />)
 
     expect(
-      screen.getByRole('heading', { name: /session studio/i })
+      screen.getByRole('heading', {
+        level: 1,
+        name: /session studio/i,
+      }),
     ).toBeInTheDocument()
   })
 
@@ -16,7 +19,7 @@ describe('Session Studio', () => {
     render(<App />)
 
     expect(
-      screen.getByText('MOCK MODE ON')
+      screen.getByText(/mock mode:/i),
     ).toBeInTheDocument()
   })
 })

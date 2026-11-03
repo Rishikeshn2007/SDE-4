@@ -2,40 +2,35 @@
 import { useState } from 'react'
 import './App.css'
 import { getMockSession } from './api/sessionApi'
+import SessionControls from './components/SessionControls'
+import MicrophonePermission from './components/MicrophonePermission'
+import TranscriptTimeline, {
+  type TranscriptEvent,
+} from './components/TranscriptTimeline'
 
 type SessionStatus = 'Idle' | 'Running' | 'Paused' | 'Stopped'
 type MicrophoneStatus = 'Prompt' | 'Granted' | 'Denied' | 'Unsupported'
-
-type TranscriptEvent = {
-  id: number
-  timestamp: string
-  text: string
-}
-
-const fixtureEvents: TranscriptEvent[] = [
-  { id: 1, timestamp: '10:00:01', text: 'Welcome to the demo session.' },
-  { id: 2, timestamp: '10:00:03', text: 'The mock transcript is working.' },
-  { id: 3, timestamp: '10:00:05', text: 'Session completed successfully.' },
-]
-
 
 function App() {
   const [status, setStatus] = useState<SessionStatus>('Idle')
   const [micStatus, setMicStatus] =
     useState<MicrophoneStatus>('Prompt')
-  const [micMessage, setMicMessage] = useState('Permission has not been requested.')
-  const [transcriptEvents, setTranscriptEvents] = useState<TranscriptEvent[]>([])
-const [apiError, setApiError] = useState('')
+  const [micMessage, setMicMessage] = useState(
+    'Permission has not been requested.',
+  )
+  const [transcriptEvents, setTranscriptEvents] =
+    useState<TranscriptEvent[]>([])
+  const [apiError, setApiError] = useState('')
 
-async function loadMockTranscript() {
-  try {
-    setApiError('')
-    const response = await getMockSession()
-    setTranscriptEvents(response.events)
-  } catch {
-    setApiError('Unable to load the mock transcript. Please try again.')
+  async function loadMockTranscript() {
+    try {
+      setApiError('')
+      const response = await getMockSession()
+      setTranscriptEvents(response.events)
+    } catch {
+      setApiError('Unable to load the mock transcript. Please try again.')
+    }
   }
-}
 
   async function requestMicrophone() {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -49,7 +44,6 @@ async function loadMockTranscript() {
         audio: true,
       })
 
-      // Stop the microphone immediately; this demo does not record audio.
       stream.getTracks().forEach((track) => track.stop())
 
       setMicStatus('Granted')
@@ -65,86 +59,105 @@ async function loadMockTranscript() {
   }
 
   return (
-    <main className="app">
-      <header className="header">
-        <div>
-          <h1>Session Studio</h1>
-          <p>Voice Session Dashboard</p>
+    <>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+
+      <main className="app dashboard" id="main-content">
+        <header className="dashboard-header">
+          <div className="brand">
+            <span className="brand-icon" aria-hidden="true">🎙️</span>
+            <h1>Session Studio</h1>
+          </div>
+          <span className="badge">W6 – Frontend &amp; UX</span>
+        </header>
+
+        <section className="notice dashboard-notice" role="status">
+          <strong>ⓘ Mock Mode:</strong> Using simulated session data for demo
+          purposes. No real audio is uploaded.
+        </section>
+
+        <SessionControls status={status} setStatus={setStatus} />
+
+        <div className="dashboard-grid">
+          <div className="dashboard-main">
+            <TranscriptTimeline
+              events={transcriptEvents}
+              apiError={apiError}
+              onLoad={loadMockTranscript}
+            />
+          </div>
+
+          <aside className="dashboard-side" aria-label="Session status">
+            <section className="panel status-panel">
+              <h2>Session Status</h2>
+
+              <div className={`permission-summary ${micStatus.toLowerCase()}`}>
+                <strong>Microphone Permission: {micStatus}</strong>
+                <p>{micMessage}</p>
+              </div>
+
+              <div className="status-row">
+                <span>◷ Session Status</span>
+                <strong>{status}</strong>
+              </div>
+
+              <div className="status-row">
+                <span>▥ Transcript Events</span>
+                <strong>{transcriptEvents.length}</strong>
+              </div>
+
+              <div className="status-row">
+                <span>☷ Mode</span>
+                <strong className="mode-label">Mock Mode</strong>
+              </div>
+            </section>
+
+            <MicrophonePermission
+              status={micStatus}
+              message={micMessage}
+              onRequest={requestMicrophone}
+            />
+          </aside>
         </div>
-        <span className="badge">MOCK MODE ON</span>
-      </header>
 
-      <section className="notice" role="status">
-        Mock mode is enabled. No real audio is uploaded.
-      </section>
+        <section className="accessibility-panel">
+          <h2>♿ Accessibility Features</h2>
 
-      <section className="panel">
-        <h2>Session Controls</h2>
-        <p>Session status: <strong>{status}</strong></p>
-        <div className="buttons">
-          <button
-            onClick={() => setStatus('Running')}
-            disabled={status === 'Running'}
-          >
-            Start Session
-          </button>
-          <button
-            onClick={() => setStatus('Paused')}
-            disabled={status !== 'Running'}
-          >
-            Pause Session
-          </button>
-          <button
-            onClick={() => setStatus('Stopped')}
-            disabled={status === 'Idle' || status === 'Stopped'}
-          >
-            Stop Session
-          </button>
-        </div>
-      </section>
+          <div className="accessibility-grid">
+            <div className="accessibility-item">
+              <strong>⌨ Skip Link</strong>
+              <span>✓ Enabled</span>
+            </div>
 
-      <section className="panel">
-        <h2>Microphone Permission</h2>
-        <p>
-          Permission status: <strong>{micStatus}</strong>
-        </p>
-        <p className="muted" role="status">{micMessage}</p>
-        <button onClick={requestMicrophone}>
-          Request Microphone Permission
-        </button>
-      </section>
+            <div className="accessibility-item">
+              <strong>◎ Focus Styles</strong>
+              <span>✓ Visible</span>
+            </div>
 
-      
+            <div className="accessibility-item">
+              <strong>♧ Semantic Structure</strong>
+              <span>✓ Implemented</span>
+            </div>
 
-<section className="panel">
-  <h2>Transcript Timeline</h2>
-  <p className="muted">
-    Mock session transcript events displayed in timestamp order.
-  </p>
+            <div className="accessibility-item">
+              <strong>ARIA Live</strong>
+              <span>✓ Available</span>
+            </div>
 
-  <button type="button" onClick={loadMockTranscript}>
-    Load Mock Transcript
-  </button>
+            <div className="accessibility-item">
+              <strong>⌨ Keyboard Support</strong>
+              <span>✓ Working</span>
+            </div>
+          </div>
+        </section>
 
-  {apiError && <p role="alert">{apiError}</p>}
-
-  {transcriptEvents.length === 0 ? (
-    <p>No transcript loaded yet. Click the button to load mock events.</p>
-  ) : (
-    <ol className="timeline">
-      {transcriptEvents.map((event) => (
-        <li key={event.id} className="timeline-event">
-          <time>{event.timestamp}</time>
-          <p>{event.text}</p>
-        </li>
-      ))}
-    </ol>
-  )}
-</section>
-
-
-      <footer>Team SDE 4 | Workstream W6 – Frontend and UX</footer>
-    </main>
+        <footer>
+          Team SDE 4 | Workstream W6 – Frontend and UX
+        </footer>
+      </main>
+    </>
   )
 }
 
