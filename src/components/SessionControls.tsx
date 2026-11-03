@@ -7,34 +7,61 @@ type SessionControlsProps = {
 }
 
 function SessionControls({ status, setStatus }: SessionControlsProps) {
+  const isRunning = status === 'Running'
+  const isPaused = status === 'Paused'
+
+  function handleMainAction() {
+    if (isRunning) {
+      setStatus('Paused')
+    } else {
+      setStatus('Running')
+    }
+  }
+
   return (
-    <section className="panel" aria-labelledby="session-heading">
-      <h2 id="session-heading">Session Controls</h2>
+    <section className="session-bar" aria-labelledby="session-heading">
+      <div className="session-info">
+        <div className="session-icon" aria-hidden="true">
+          🎙️
+        </div>
 
-      <p>
-        Session status: <strong>{status}</strong>
-      </p>
+        <div>
+          <h2 id="session-heading">Session Studio</h2>
+          <p>Record • Transcribe • Review</p>
+        </div>
+      </div>
 
-      <div className="buttons">
+      <div className="session-indicator" role="status">
+        <span className={isRunning ? 'status-dot active' : 'status-dot'} />
+        <strong>
+          {isRunning
+            ? 'Session Active'
+            : isPaused
+              ? 'Session Paused'
+              : status === 'Stopped'
+                ? 'Session Ended'
+                : 'Session Idle'}
+        </strong>
+      </div>
+
+      <div className="session-actions">
         <button
-          onClick={() => setStatus('Running')}
-          disabled={status === 'Running'}
+          className="pause-button"
+          onClick={handleMainAction}
         >
-          Start Session
+          {isRunning
+            ? 'Ⅱ Pause'
+            : isPaused
+              ? '▶ Resume'
+              : '▶ Start Session'}
         </button>
 
         <button
-          onClick={() => setStatus('Paused')}
-          disabled={status !== 'Running'}
-        >
-          Pause Session
-        </button>
-
-        <button
+          className="stop-button"
           onClick={() => setStatus('Stopped')}
-          disabled={status === 'Idle' || status === 'Stopped'}
+          disabled={!isRunning && !isPaused}
         >
-          Stop Session
+          ■ Stop Session
         </button>
       </div>
     </section>
