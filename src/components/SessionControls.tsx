@@ -9,12 +9,25 @@ type SessionControlsProps = {
 function SessionControls({ status, setStatus }: SessionControlsProps) {
   const isRunning = status === 'Running'
   const isPaused = status === 'Paused'
+  const isActive = isRunning || isPaused
+
+  const captureLabel = isRunning
+    ? 'CAPTURING'
+    : isPaused
+      ? 'PAUSED'
+      : 'INACTIVE'
 
   function handleMainAction() {
     if (isRunning) {
       setStatus('Paused')
-    } else {
+    } else if (status === 'Idle' || isPaused) {
       setStatus('Running')
+    }
+  }
+
+  function handleStop() {
+    if (isActive) {
+      setStatus('Stopped')
     }
   }
 
@@ -31,35 +44,51 @@ function SessionControls({ status, setStatus }: SessionControlsProps) {
         </div>
       </div>
 
-      <div className="session-indicator" role="status">
-        <span className={isRunning ? 'status-dot active' : 'status-dot'} />
-        <strong>
-          {isRunning
-            ? 'Session Active'
-            : isPaused
-              ? 'Session Paused'
-              : status === 'Stopped'
-                ? 'Session Ended'
-                : 'Session Idle'}
-        </strong>
+      <div
+        className={`session-indicator ${isRunning ? 'capturing' : isPaused ? 'paused' : 'inactive'}`}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <span
+          className={`status-dot ${isRunning ? 'active' : isPaused ? 'paused' : ''}`}
+          aria-hidden="true"
+        />
+
+        <strong>{captureLabel}</strong>
       </div>
 
       <div className="session-actions">
         <button
+          type="button"
           className="pause-button"
           onClick={handleMainAction}
+          disabled={status === 'Stopped'}
+          aria-label={
+            isRunning
+              ? 'Pause session'
+              : isPaused
+                ? 'Resume session'
+                : status === 'Idle'
+                  ? 'Start session'
+                  : 'Session stopped'
+          }
         >
           {isRunning
             ? 'Ⅱ Pause'
             : isPaused
               ? '▶ Resume'
-              : '▶ Start Session'}
+              : status === 'Idle'
+                ? '▶ Start Session'
+                : 'Session Stopped'}
         </button>
 
         <button
+          type="button"
           className="stop-button"
-          onClick={() => setStatus('Stopped')}
-          disabled={!isRunning && !isPaused}
+          onClick={handleStop}
+          disabled={!isActive}
+          aria-label="Stop session"
         >
           ■ Stop Session
         </button>

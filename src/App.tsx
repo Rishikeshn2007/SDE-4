@@ -7,6 +7,7 @@ import MicrophonePermission from './components/MicrophonePermission'
 import TranscriptTimeline, {
   type TranscriptEvent,
 } from './components/TranscriptTimeline'
+import ContextPanel from './components/ContextPanel'
 
 type SessionStatus = 'Idle' | 'Running' | 'Paused' | 'Stopped'
 type MicrophoneStatus = 'Prompt' | 'Granted' | 'Denied' | 'Unsupported'
@@ -121,6 +122,10 @@ function App() {
             />
           </aside>
         </div>
+
+              
+
+        <ContextPanel />
 
         <section className="accessibility-panel">
           <h2>♿ Accessibility Features</h2>

@@ -547,3 +547,37 @@ footer {
     width: 100%;
   }
 }
+/* Week 2: Capture Indicator States */
+
+.session-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.session-indicator.capturing {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.session-indicator.paused {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.session-indicator.inactive {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.status-dot.paused {
+  background: #f59e0b;
+}
+
+.session-indicator .status-dot.active {
+  background: #16a34a;
+}

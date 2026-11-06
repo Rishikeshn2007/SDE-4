@@ -1,8 +1,7 @@
-export type TranscriptEvent = {
-  id: number
-  timestamp: string
-  text: string
-}
+
+import type { TranscriptEvent } from '../api/sessionApi'
+
+export type { TranscriptEvent } from '../api/sessionApi'
 
 type TranscriptTimelineProps = {
   events: TranscriptEvent[]
@@ -15,15 +14,41 @@ function TranscriptTimeline({
   apiError,
   onLoad,
 }: TranscriptTimelineProps) {
+  const groupedEvents = new Map<number, TranscriptEvent[]>()
+
+  events.forEach((event) => {
+    const existing = groupedEvents.get(event.segmentId) ?? []
+    groupedEvents.set(event.segmentId, [...existing, event])
+  })
+
+  const segments = Array.from(groupedEvents.values()).map((revisions) => {
+    const orderedRevisions = [...revisions].sort(
+      (a, b) => a.revision - b.revision,
+    )
+
+    const finalVersions = orderedRevisions.filter(
+      (event) => event.status === 'final',
+    )
+
+    const current =
+      finalVersions[finalVersions.length - 1] ??
+      orderedRevisions[orderedRevisions.length - 1]
+
+    return {
+      current,
+      revisions: orderedRevisions,
+    }
+  })
+
   return (
     <section className="panel" aria-labelledby="transcript-heading">
       <h2 id="transcript-heading">Transcript Timeline</h2>
 
       <p className="muted">
-        Transcript events are loaded from mock fixture data.
+        View interim and final transcript segments, revisions, and confidence.
       </p>
 
-      <button onClick={onLoad}>
+      <button type="button" onClick={onLoad}>
         Load Mock Transcript
       </button>
 
@@ -32,15 +57,53 @@ function TranscriptTimeline({
       {events.length === 0 ? (
         <p className="muted">No transcript events loaded yet.</p>
       ) : (
-        <ol className="timeline">
-          {events.map((event) => (
-            <li key={event.id}>
-              <time>{event.timestamp}</time>
-              <p>{event.text}</p>
+        <ol className="timeline" aria-label="Transcript segments">
+          {segments.map(({ current, revisions }) => (
+            <li key={current.segmentId}>
+              <time>{current.timestamp}</time>
+
+              <p>{current.text}</p>
+
+              <p>
+                <strong>Status: </strong>
+                <span>{current.status.toUpperCase()}</span>
+              </p>
+
+              <p>
+                <strong>Confidence: </strong>
+                {current.confidence}%
+              </p>
+
+              <div className="revision-history">
+                <strong>Revision History</strong>
+
+                <ul>
+                  {revisions.map((revision) => (
+                    <li key={revision.id}>
+                      <span>
+                        Revision {revision.revision} ({revision.status})
+                      </span>
+                      <p>{revision.text}</p>
+                      <small>Confidence: {revision.confidence}%</small>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </li>
           ))}
         </ol>
       )}
+
+      <div
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {events.length > 0
+          ? `${segments.length} transcript segments loaded.`
+          : ''}
+      </div>
     </section>
   )
 }
