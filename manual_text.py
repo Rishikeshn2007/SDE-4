@@ -47,20 +47,12 @@ except ImportError:
 from sde4_stt.accumulator import SegmentAccumulator
 from sde4_stt.adapters.fake_transcriber import FakeTranscriber
 from sde4_stt.adapters.real_transcriber import RealSpeechTranscriber
-from sde4_stt.schemas.audio import AudioChunk
+from academia_audio.schemas import AudioChunk, AudioFormat
 from sde4_stt.schemas.transcript import TranscriptEventType
-
-
-def rms_level(data: bytes) -> float:
-    """Computes RMS loudness in range [0.0, 1.0] from 16-bit PCM bytes."""
-    samples = array("h")
-    samples.frombytes(data)
-    if sys.byteorder == "big":
-        samples.byteswap()
-    if not samples:
-        return 0.0
-    mean_sq = sum(s * s for s in samples) / len(samples)
-    return math.sqrt(mean_sq) / 32768.0
+from sde4_stt.vad import VoiceActivityDetector, VADConfig
+from sde4_stt.orchestrator import TranscriptionOrchestrator
+from sde4_stt.preprocessing import AudioPreprocessor
+from sde4_stt.retry import RetryConfig
 
 
 def main() -> int:
@@ -72,7 +64,14 @@ def main() -> int:
         default="real",
         help="Transcriber engine: 'real' (actual spoken words) or 'mock' (canned text). Default: 'real'",
     )
-    parser.add_argument("--seconds", type=float, default=10.0, help="Recording time in seconds (default: 10.0)")
+    parser.add_argument(
+        "--seconds",
+        "--duration",
+        dest="seconds",
+        type=float,
+        default=10.0,
+        help="Recording time in seconds (default: 10.0)",
+    )
     parser.add_argument("--chunk-ms", type=int, default=200, help="Chunk length in milliseconds (default: 200)")
     parser.add_argument("--sample-rate", type=int, default=16000, help="Sample rate in Hz (default: 16000)")
     parser.add_argument("--device", type=int, default=None, help="Input device ID (optional)")
@@ -109,7 +108,7 @@ def main() -> int:
     print("=" * 70)
     print(">>> SPEAK INTO YOUR MICROPHONE NOW! <<<\n")
 
-    # Initialize STT Components based on selected engine
+    # Initialize STT Components and VAD
     session_id = f"live_mic_{int(time.time())}"
     if args.engine == "real":
         transcriber = RealSpeechTranscriber(
@@ -122,17 +121,20 @@ def main() -> int:
             bytes_per_second=sample_rate * 2,
         )
 
-    accumulator = SegmentAccumulator()
-
-    # Start session
-    start_events = transcriber.start_session(session_id=session_id, language=args.language)
-    accumulated_events = list(start_events)
-    print(f"[SESSION STARTED] Session ID: {session_id}")
+    # Initialize reusable Voice Activity Detector
+    vad = VoiceActivityDetector(
+        VADConfig(
+            energy_threshold=0.015,
+            min_speech_duration_s=0.08,
+            min_silence_duration_s=0.35,
+            adaptive_noise=True,
+        )
+    )
 
     max_chunks = int(args.seconds * 1000 / args.chunk_ms)
     chunks_processed = 0
     speech_detected_count = 0
-    silence_threshold = 0.015  # RMS threshold for detecting voice activity
+    recorded_chunks: list[AudioChunk] = []
 
     try:
         with sd.RawInputStream(
@@ -149,8 +151,20 @@ def main() -> int:
                 except queue.Empty:
                     continue
 
-                level = rms_level(data)
-                is_speech = level > silence_threshold
+                # Package into authoritative W1 AudioChunk
+                audio_fmt = AudioFormat(sample_rate=sample_rate, channels=channels, sample_width=2)
+                chunk_obj = AudioChunk(
+                    sequence_id=chunks_processed,
+                    timestamp_s=round(chunks_processed * (args.chunk_ms / 1000.0), 3),
+                    format=audio_fmt,
+                    data=data,
+                )
+                recorded_chunks.append(chunk_obj)
+
+                # Process through reusable VoiceActivityDetector
+                vad_result = vad.process_chunk(chunk_obj)
+                level = vad_result.energy
+                is_speech = vad_result.is_speech
                 if is_speech:
                     speech_detected_count += 1
 
@@ -158,26 +172,6 @@ def main() -> int:
                 bar_len = min(25, int(level * 100))
                 meter = "#" * bar_len + " " * (25 - bar_len)
                 status = "SPEAKING" if is_speech else "LISTENING"
-
-                # Package into typed AudioChunk
-                chunk_obj = AudioChunk(
-                    chunk_id=f"chunk_{chunks_processed:04d}",
-                    data=data,
-                    sequence_number=chunks_processed,
-                    sample_rate=sample_rate,
-                    channels=channels,
-                    duration_seconds=args.chunk_ms / 1000.0,
-                    is_last=False,
-                )
-
-                # Process chunk through STT pipeline
-                events = transcriber.process_chunk(chunk_obj)
-                for ev in events:
-                    accumulated_events.append(ev)
-                    if ev.event_type == TranscriptEventType.INTERIM and ev.segment:
-                        print(f"\n[INTERIM] -> \"{ev.segment.text}\"")
-                    elif ev.event_type == TranscriptEventType.FINAL and ev.segment:
-                        print(f"\n[FINAL] -> \"{ev.segment.text}\"")
 
                 # Dynamic live VU meter
                 elapsed = chunks_processed * args.chunk_ms / 1000.0
@@ -195,17 +189,30 @@ def main() -> int:
         return 1
 
     print("\n\n" + "=" * 70)
-    print("  PROCESSING REAL SPEECH AUDIO...")
+    print("  EXECUTING ORCHESTRATED STT PIPELINE...")
     print("=" * 70)
 
-    # Finish session and transcribe actual spoken speech
-    finish_events = transcriber.finish_session()
-    accumulated_events.extend(finish_events)
+    # Execute through Week 2 TranscriptionOrchestrator
+    preprocessor = AudioPreprocessor(target_sample_rate=16000, normalize_audio=True)
+    retry_cfg = RetryConfig(max_retries=2, timeout_s=30.0)
+    orchestrator = TranscriptionOrchestrator(
+        adapter=transcriber,
+        preprocessor=preprocessor,
+        retry_config=retry_cfg,
+    )
 
-    found_final = False
-    for ev in finish_events:
-        if ev.event_type == TranscriptEventType.FINAL and ev.segment:
-            found_final = True
+    result = orchestrator.transcribe(
+        recorded_chunks,
+        session_id=session_id,
+        language=args.language,
+        sample_rate=sample_rate,
+    )
+
+    found_final = len(result.segments) > 0
+    for ev in result.events:
+        if ev.event_type == TranscriptEventType.INTERIM and ev.segment:
+            print(f"[INTERIM] -> \"{ev.segment.text}\"")
+        elif ev.event_type == TranscriptEventType.FINAL and ev.segment:
             print(f"\n[SPEECH TRANSCRIBED]")
             print(f"Text:       \"{ev.segment.text}\"")
             print(f"Duration:   {ev.segment.duration:.2f} seconds")
@@ -217,22 +224,22 @@ def main() -> int:
         elif ev.event_type == TranscriptEventType.ERROR and ev.error:
             print(f"\n[NOTICE] {ev.error.message}")
 
-    # Pass all events to SegmentAccumulator to verify ordering and completion
-    if found_final:
-        print("\nAccumulating segments with SegmentAccumulator...")
-        try:
-            final_segments = accumulator.accumulate(accumulated_events)
-            full_text = " ".join(s.text for s in final_segments)
-            print("\n" + "=" * 70)
-            print(f">>> WHAT YOU SPOKE (ACCUMULATED TRANSCRIPT): <<<")
-            print(f"\"{full_text}\"")
-            print("=" * 70)
-        except Exception as exc:
-            print(f"Accumulator error: {exc}", file=sys.stderr)
+    if found_final and result.full_text:
+        print("\n" + "=" * 70)
+        print(f">>> WHAT YOU SPOKE (ACCUMULATED TRANSCRIPT): <<<")
+        print(f"\"{result.full_text}\"")
+        print("=" * 70)
     else:
         print("\nNo spoken words recognized (did you speak loud enough, or was the mic muted?).")
 
-    print(f"\nFinished: {chunks_processed} chunks processed ({chunks_processed * args.chunk_ms / 1000.0:.1f}s audio).")
+    print(
+        f"\nFinished: {chunks_processed} chunks recorded ({chunks_processed * args.chunk_ms / 1000.0:.1f}s audio)."
+    )
+    print(
+        f"Orchestrator Stats: {result.chunks_processed} chunks processed, "
+        f"{result.duplicates_suppressed} duplicates suppressed, "
+        f"{result.interims_reconciled} interims reconciled."
+    )
     return 0
 
 

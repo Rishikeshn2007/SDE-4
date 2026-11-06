@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from sde4_stt.adapters.fake_transcriber import FakeTranscriber
-from sde4_stt.schemas.audio import AudioChunk
+from academia_audio.schemas import AudioChunk, AudioFormat
 from sde4_stt.accumulator import SegmentAccumulator
 from academia_audio import MockMicrophone
 
@@ -31,10 +31,13 @@ def demo_chunk_to_transcript():
         canned_transcript="Why is this application showing this error"
     )
 
+    fmt = AudioFormat(sample_rate=16000, channels=1, sample_width=2)
+    chunk_bytes = b"\x00\x00" * int(16000 * 0.75)  # 24000 bytes for 0.75s 16kHz 16-bit PCM
+
     chunks = [
-        AudioChunk(chunk_id="chunk_0", data=b"raw_audio_slice_1", sequence_number=0, duration_seconds=0.75),
-        AudioChunk(chunk_id="chunk_1", data=b"raw_audio_slice_2", sequence_number=1, duration_seconds=0.75),
-        AudioChunk(chunk_id="chunk_2", data=b"raw_audio_slice_3", sequence_number=2, duration_seconds=0.75, is_last=True),
+        AudioChunk(sequence_id=0, timestamp_s=0.0, format=fmt, data=chunk_bytes),
+        AudioChunk(sequence_id=1, timestamp_s=0.75, format=fmt, data=chunk_bytes),
+        AudioChunk(sequence_id=2, timestamp_s=1.5, format=fmt, data=chunk_bytes),
     ]
 
     print("\nStreaming 3 audio chunks into FakeTranscriber (Session: 'demo_session_101'):\n")
