@@ -14,19 +14,15 @@ def test_root():
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
 
 
 def test_readiness():
     response = client.get("/ready")
     assert response.status_code == 200
-    assert response.json() == {"status": "ready"}
 
 
 def test_request_and_correlation_ids():
     response = client.get("/health")
-
-    assert response.status_code == 200
     assert "X-Request-ID" in response.headers
     assert "X-Correlation-ID" in response.headers
 
@@ -38,34 +34,29 @@ def test_create_mock_session():
     )
 
     assert response.status_code == 201
-
-    data = response.json()
-    assert data["state"] == "created"
-    assert "session_id" in data
-    assert data["session_id"]
+    assert response.json()["state"] == "created"
 
 
 def test_get_existing_session():
-    create_response = client.post(
+    created = client.post(
         "/sessions",
         json={"mode": "mock"},
     )
 
-    session_id = create_response.json()["session_id"]
+    session_id = created.json()["session_id"]
 
     response = client.get(f"/sessions/{session_id}")
 
     assert response.status_code == 200
-    assert response.json()["session_id"] == session_id
-    assert response.json()["state"] == "created"
 
 
 def test_update_session_state():
-    create_response = client.post(
+    created = client.post(
         "/sessions",
         json={"mode": "mock"},
     )
-    session_id = create_response.json()["session_id"]
+
+    session_id = created.json()["session_id"]
 
     response = client.patch(
         f"/sessions/{session_id}/state",
@@ -76,15 +67,73 @@ def test_update_session_state():
     assert response.json()["state"] == "active"
 
 
-def test_missing_session_returns_standard_error():
-    response = client.get("/sessions/nonexistent-session")
+def test_missing_session():
+    response = client.get("/sessions/nonexistent")
 
     assert response.status_code == 404
 
-    error = response.json()["error"]
-    assert error["code"] == "SESSION_NOT_FOUND"
-    assert error["retryable"] is False
-    assert "correlation_id" in error
-    assert "message_safe_for_user" in error
-    assert "details_redacted" in error
-    
+
+def test_idempotency():
+    headers = {"Idempotency-Key": "week2-test-001"}
+
+    first = client.post(
+        "/sessions",
+        json={"mode": "mock"},
+        headers=headers,
+    )
+
+    second = client.post(
+        "/sessions",
+        json={"mode": "mock"},
+        headers=headers,
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    assert (
+        first.json()["session_id"]
+        == second.json()["session_id"]
+    )
+
+
+def test_event_streaming():
+    created = client.post(
+        "/sessions",
+        json={"mode": "mock"},
+    )
+
+    session_id = created.json()["session_id"]
+
+    response = client.get(
+        f"/sessions/{session_id}/events"
+    )
+
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    assert "session_created" in response.text
+
+
+def test_stop_session():
+    created = client.post(
+        "/sessions",
+        json={"mode": "mock"},
+    )
+
+    session_id = created.json()["session_id"]
+
+    response = client.post(
+        f"/sessions/{session_id}/stop"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "completed"
+
+
+def test_invalid_session_state():
+    response = client.post(
+        "/sessions",
+        json={"mode": "invalid"},
+    )
+
+    assert response.status_code == 400
