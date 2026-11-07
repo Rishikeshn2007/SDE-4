@@ -33,3 +33,16 @@ def test_cli_rejects_bad_sample_rate(capsys):
 def test_cli_rejects_bad_channels(capsys):
     assert main(["--channels", "5"]) == 2
     assert "invalid_channels" in capsys.readouterr().err
+
+
+def test_cli_vad_flag(capsys):
+    assert main(["--duration", "0.05", "--vad"]) == 0
+    out = capsys.readouterr().out
+    assert "SILENCE" in out or "SPEECH" in out
+
+
+def test_cli_demo_flag(capsys):
+    assert main(["--demo"]) == 0
+    out = capsys.readouterr().out
+    assert "ACADEMIA AI VOICE BOT - WEEK 2 PIPELINE DEMO" in out
+    assert "Buffer released: True" in out
