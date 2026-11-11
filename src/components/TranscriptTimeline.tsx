@@ -7,12 +7,16 @@ type TranscriptTimelineProps = {
   events: TranscriptEvent[]
   apiError: string
   onLoad: () => void
+  isLoading?: boolean
+  isOffline?: boolean
 }
 
 function TranscriptTimeline({
   events,
   apiError,
   onLoad,
+  isLoading = false,
+  isOffline = false,
 }: TranscriptTimelineProps) {
   const groupedEvents = new Map<number, TranscriptEvent[]>()
 
@@ -34,10 +38,7 @@ function TranscriptTimeline({
       finalVersions[finalVersions.length - 1] ??
       orderedRevisions[orderedRevisions.length - 1]
 
-    return {
-      current,
-      revisions: orderedRevisions,
-    }
+    return { current, revisions: orderedRevisions }
   })
 
   return (
@@ -48,11 +49,28 @@ function TranscriptTimeline({
         View interim and final transcript segments, revisions, and confidence.
       </p>
 
-      <button type="button" onClick={onLoad}>
-        Load Mock Transcript
+      <button type="button" onClick={onLoad} disabled={isLoading}>
+        {isLoading ? 'Loading Transcript...' : 'Load Mock Transcript'}
       </button>
 
-      {apiError && <p role="alert">{apiError}</p>}
+      {isLoading && (
+        <p role="status" aria-live="polite">
+          Loading transcript. Please wait.
+        </p>
+      )}
+
+      {isOffline && (
+        <p role="status" aria-live="polite">
+          You are offline. The backend cannot be reached. Check your internet
+          connection and try again.
+        </p>
+      )}
+
+      {apiError && (
+        <p role="alert" aria-live="assertive">
+          {apiError}
+        </p>
+      )}
 
       {events.length === 0 ? (
         <p className="muted">No transcript events loaded yet.</p>
@@ -61,7 +79,6 @@ function TranscriptTimeline({
           {segments.map(({ current, revisions }) => (
             <li key={current.segmentId}>
               <time>{current.timestamp}</time>
-
               <p>{current.text}</p>
 
               <p>
@@ -76,7 +93,6 @@ function TranscriptTimeline({
 
               <div className="revision-history">
                 <strong>Revision History</strong>
-
                 <ul>
                   {revisions.map((revision) => (
                     <li key={revision.id}>

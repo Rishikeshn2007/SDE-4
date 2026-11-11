@@ -87,4 +87,37 @@ describe('TranscriptTimeline', () => {
 
     expect(onLoad).toHaveBeenCalledTimes(1)
   })
+    it('displays and announces the loading state', () => {
+    render(
+      <TranscriptTimeline
+        events={[]}
+        apiError=""
+        onLoad={vi.fn()}
+        isLoading={true}
+      />,
+    )
+
+    expect(
+      screen.getByText('Loading transcript. Please wait.'),
+    ).toBeInTheDocument()
+
+    expect(
+      screen.getByRole('button', { name: /loading transcript/i }),
+    ).toBeDisabled()
+  })
+
+  it('displays and announces the offline state', () => {
+    render(
+      <TranscriptTimeline
+        events={[]}
+        apiError=""
+        onLoad={vi.fn()}
+        isOffline={true}
+      />,
+    )
+
+    expect(
+      screen.getByText(/you are offline/i),
+    ).toBeInTheDocument()
+  })
 })

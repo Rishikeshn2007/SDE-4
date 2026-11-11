@@ -1,5 +1,5 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import { getMockSession } from './api/sessionApi'
 import SessionControls from './components/SessionControls'
@@ -22,16 +22,47 @@ function App() {
   const [transcriptEvents, setTranscriptEvents] =
     useState<TranscriptEvent[]>([])
   const [apiError, setApiError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+const [isOffline, setIsOffline] = useState(!navigator.onLine)
+useEffect(() => {
+  function handleOnline() {
+    setIsOffline(false)
+  }
+
+  function handleOffline() {
+    setIsOffline(true)
+  }
+
+  window.addEventListener('online', handleOnline)
+  window.addEventListener('offline', handleOffline)
+
+  return () => {
+    window.removeEventListener('online', handleOnline)
+    window.removeEventListener('offline', handleOffline)
+  }
+}, [])
 
   async function loadMockTranscript() {
-    try {
-      setApiError('')
-      const response = await getMockSession()
-      setTranscriptEvents(response.events)
-    } catch {
-      setApiError('Unable to load the mock transcript. Please try again.')
-    }
+  if (!navigator.onLine) {
+    setIsOffline(true)
+    setApiError('')
+    return
   }
+
+  try {
+    setIsLoading(true)
+    setApiError('')
+    setIsOffline(false)
+
+    const response = await getMockSession()
+    setTranscriptEvents(response.events)
+  } catch {
+    setIsOffline(true)
+    setApiError('')
+  } finally {
+    setIsLoading(false)
+  }
+}
 
   async function requestMicrophone() {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -84,10 +115,12 @@ function App() {
         <div className="dashboard-grid">
           <div className="dashboard-main">
             <TranscriptTimeline
-              events={transcriptEvents}
-              apiError={apiError}
-              onLoad={loadMockTranscript}
-            />
+  events={transcriptEvents}
+  apiError={apiError}
+  onLoad={loadMockTranscript}
+  isLoading={isLoading}
+  isOffline={isOffline}
+/>
           </div>
 
           <aside className="dashboard-side" aria-label="Session status">
