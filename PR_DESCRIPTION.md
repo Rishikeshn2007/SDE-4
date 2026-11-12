@@ -32,26 +32,25 @@
 
 ```
 ============================= test session starts =============================
-platform win32 -- Python 3.12.8, pytest-8.3.4, pluggy-1.6.0
+platform win32 -- Python 3.12.8, pytest-9.2.0, pluggy-1.7.0
 rootdir: C:\Users\sures\Desktop\SDE-4
 configfile: pyproject.toml
 testpaths: tests
-plugins: anyio-4.15.1, flask-1.3.0
-collected 192 items
+collected 199 items
 
 tests/test_accumulator.py .....                                          [  2%]
-tests/test_adapters.py ............                                      [  8%]
-tests/test_cli.py .....                                                  [ 11%]
-tests/test_dedup.py ...........                                          [ 17%]
-tests/test_orchestrator.py .....................                         [ 28%]
-tests/test_preprocessing.py ........................                     [ 40%]
-tests/test_retry.py .........................                            [ 53%]
-tests/test_schemas.py .................................................. [ 79%]
+tests/test_adapters.py ...................                               [ 12%]
+tests/test_cli.py .....                                                  [ 14%]
+tests/test_dedup.py ...........                                          [ 20%]
+tests/test_orchestrator.py .....................                         [ 30%]
+tests/test_preprocessing.py ........................                     [ 42%]
+tests/test_retry.py .........................                            [ 55%]
+tests/test_schemas.py .................................................. [ 80%]
 .....                                                                    [ 82%]
 tests/test_source_and_chunker.py .......................                 [ 94%]
 tests/test_vad.py ...........                                            [100%]
 
-======================= 192 passed, 2 warnings in 1.40s =======================
+============================= 199 passed in 0.70s =============================
 ```
 
 ---
