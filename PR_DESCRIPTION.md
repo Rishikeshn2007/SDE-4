@@ -1,36 +1,88 @@
-## SDE 4: Week 2 – Speech-to-Text Orchestration, Ordering & De-duplication, Retries & Preprocessing (W2)
+# SDE-4: Speech-to-Text Pipeline – Complete W1 & W2 Implementation
 
 **Student:** Suresh V Patil  
 **Team:** SDE 4  
-**Workstream:** W2 – Speech-to-text (Days 8–14)  
-**Project Folder:** `projects/sde-4-voicebot/` | **Branch:** `team/sde-4-voicebot` (working on `suresh`)  
+**Workstream:** W1 (Foundation) & W2 (Orchestration & Resiliency)  
+**Branch:** `suresh` -> `main`  
+**PR URL:** https://github.com/Rishikeshn2007/SDE-4/pull/7  
 
 ---
 
-### Deliverables Completed
+## 1. Summary of Work
 
-- [x] **D8–9 (Transcription Orchestrator):** Implemented `TranscriptionOrchestrator` and `TranscriptionResult` in [`src/sde4_stt/orchestrator.py`](src/sde4_stt/orchestrator.py) to manage the entire chunk-to-transcript pipeline end-to-end.
-- [x] **D10–11 (Ordering, De-duplication & Reconciliation):** Built `EventDeduplicator` in [`src/sde4_stt/dedup.py`](src/sde4_stt/dedup.py) with duplicate event ID suppression, interim-final reconciliation, and strictly sorted final segments.
-- [x] **D12–13 (Timeouts, Bounded Retries & Error Normalization):** Built `RetryConfig`, `NormalizedError`, and `RetryableAdapter` in [`src/sde4_stt/retry.py`](src/sde4_stt/retry.py) with exponential backoff and cumulative timeouts. Guarantees no raw exceptions leak out.
-- [x] **D12–13 (Audio Preprocessing & VAD):** Implemented `AudioPreprocessor` in [`src/sde4_stt/preprocessing.py`](src/sde4_stt/preprocessing.py) providing anti-aliased sinc-FIR downsampling, channel conversion (mono <-> stereo), and clipping-free RMS normalization. Implemented reusable stateful `VoiceActivityDetector` in [`src/sde4_stt/vad.py`](src/sde4_stt/vad.py).
-- [x] **D14 (Contract Tests & Demo):** Comprehensive contract test suite in [`tests/test_orchestrator.py`](tests/test_orchestrator.py), [`tests/test_dedup.py`](tests/test_dedup.py), [`tests/test_retry.py`](tests/test_retry.py), [`tests/test_preprocessing.py`](tests/test_preprocessing.py), and [`tests/test_vad.py`](tests/test_vad.py). Runnable synthetic demo in [`demo_w2.py`](demo_w2.py).
+This Pull Request delivers the complete Speech-to-Text (STT) workstream for the Academia AI Voice Co-Pilot:
+- **Week 1:** Foundational data contracts, provider-neutral adapter interface, deterministic mock transcriber, segment accumulation, and clean dependency isolation.
+- **Week 2:** Chunk-to-provider orchestration, event ordering and deduplication, interim/final reconciliation, bounded retries with genuine timeout enforcement, audio preprocessing (sinc-FIR downsampling, RMS normalization), and stateful Voice Activity Detection (VAD).
 
 ---
 
-### Week 1 Code Review Feedback Fixes
+## 2. Week 1 Deliverables & Review Fixes
 
-- [x] **Google SpeechRecognition Optional:** Removed eager `import speech_recognition` from all top-level package paths. `RealSpeechTranscriber` uses lazy import inside `__init__`, raising a descriptive error instructing how to install `.[google-stt]`.
-- [x] **Clean Adapters Export:** `sde4_stt/adapters/__init__.py` strictly exports only `BaseTranscriberAdapter` and `FakeTranscriber`. `RealSpeechTranscriber` is imported directly by consumers when needed.
-- [x] **pyproject.toml Optional Extra:** Declared `google-stt = ["SpeechRecognition>=3.10.0", "sounddevice>=0.4.0"]` under `[project.optional-dependencies]` with standard dependencies remaining lightweight.
-- [x] **Single Authoritative AudioChunk Schema:** Deleted duplicate Pydantic `AudioChunk` in `sde4_stt/schemas/audio.py`. Reused canonical W1 dataclass from `academia_audio.schemas`.
-- [x] **Restored Live Microphone & Demos:** Updated `manual_text.py` and `demo_stt.py` to use W1 `AudioChunk` and `AudioFormat`. Verified live recording with `--engine mock --seconds 2` and `--engine real --seconds 3`.
-- [x] **Reusable VAD & Real STT Orchestrator Integration:** Wired `VoiceActivityDetector` and `TranscriptionOrchestrator` into `manual_text.py`.
+### Core Architecture
+- **Strict Data Contracts (`academia_audio.schemas`, `src/sde4_stt/schemas/transcript.py`):**
+  - Authoritative audio contracts (`AudioChunk`, `AudioFormat`, `AudioError`, `AudioErrorCode`).
+  - Strict Pydantic V2 transcript contracts (`TranscriptSegment`, `WordTiming`, `TranscriptError`, `TranscriptEvent`, `TranscriptEventType`) with timestamp ordering and BCP-47 language validation.
+- **Provider-Neutral Adapter Interface (`src/sde4_stt/adapters/base.py`):**
+  - Abstract base contract enforcing session lifecycle: `start_session` -> `process_chunk` -> `finish_session`.
+- **Deterministic Fake Transcriber (`src/sde4_stt/adapters/fake_transcriber.py`):**
+  - Zero-cost mock engine supporting canned scripts, chunk hashing, and simulated error injection without any API keys or network access.
+- **Segment Accumulation & Live Testing:**
+  - `SegmentAccumulator` (`src/sde4_stt/accumulator.py`) assembling ordered final utterances.
+  - Interactive live mic script (`manual_text.py`) and mock demo (`demo_stt.py`).
+
+### Week 1 Code Review Fixes Implemented
+- [x] **Optional Real Provider:** `speech_recognition` is lazily imported inside `RealSpeechTranscriber.__init__()` and raises a clear `ImportError` if invoked without the optional package.
+- [x] **Clean Adapters Export:** `src/sde4_stt/adapters/__init__.py` strictly exports *only* `BaseTranscriberAdapter` and `FakeTranscriber`.
+- [x] **Isolated Dependencies in `pyproject.toml`:** `SpeechRecognition` and `sounddevice` are isolated under `[project.optional-dependencies]` as `google-stt`.
+- [x] **Single `AudioChunk` Schema:** Removed duplicate `schemas/audio.py` and reused canonical W1 `AudioChunk` from `academia_audio.schemas`.
+- [x] **Git Cleanup:** Removed `.venv-offline-test/` binaries from git tracking and added `.venv*` to `.gitignore`.
 
 ---
 
-### Test Suite Output
+## 3. Week 2 Deliverables Completed
 
-```
+### D8–9: Transcription Orchestrator (`src/sde4_stt/orchestrator.py`)
+- Coordinates the complete chunk-to-transcript pipeline.
+- Returns structured `TranscriptionResult` containing ordered segments, concatenated text, execution timings, duplicate suppression counts, and reconciled interim counts.
+- Exception boundaries guarantee no raw provider exceptions crash the pipeline.
+
+### D10–11: Ordering, De-duplication & Reconciliation (`src/sde4_stt/dedup.py`)
+- Built `EventDeduplicator` tracking processed `event_id`s to eliminate redundant events.
+- Reconciles non-final `INTERIM` hypotheses into immutable `FINAL` segments with strict chronological monotonicity.
+
+### D12–13: Timeouts, Bounded Retries & Error Normalization (`src/sde4_stt/retry.py`)
+- `RetryConfig`, `NormalizedError`, and `RetryableAdapter`.
+- Thread-safe timeout enforcement using `ThreadPoolExecutor` with cumulative session budget tracking.
+- Exponential backoff retry loop with configurable jitter and max attempts.
+- Normalizes third-party exceptions into typed `TranscriptError` models.
+
+### D12–13: Audio Preprocessing & Reusable VAD (`src/sde4_stt/preprocessing.py`, `src/sde4_stt/vad.py`)
+- **Audio Preprocessor:** Anti-aliasing sinc-FIR low-pass filter downsampling (e.g. 48 kHz -> 16 kHz), channel conversion (stereo <-> mono), and clipping-free RMS gain normalization.
+- **Voice Activity Detector:** Stateful `VoiceActivityDetector` tracking speech onset, silence trailing windows, and adaptive background noise estimation.
+
+### D14: Synthetic Demo & Contract Tests (`demo_w2.py`, `tests/`)
+- End-to-end runnable demo (`demo_w2.py`) executing a synthetic 48 kHz fixture preprocessed and transcribed with zero API keys.
+- Comprehensive contract test suites verifying all W1 and W2 components.
+
+---
+
+## 4. Acceptance Criteria Checklist
+
+- [x] **Chunk to transcript events works end to end in mock mode:** Verified via `TranscriptionOrchestrator`, `demo_stt.py`, and `demo_w2.py`.
+- [x] **Out-of-order and duplicate segments handled correctly:** Reconciled into sorted final utterances.
+- [x] **Timeouts and bounded retries work:** Provider errors normalized into `TranscriptError` without crashing the pipeline.
+- [x] **Resampling and normalization tested:** Anti-aliasing sinc-FIR filter and RMS normalization fully covered.
+- [x] **Contract tests cover the adapter and events:** Default path requires no real provider or API key.
+- [x] **No duplicate schema definitions:** Authoritative W1 schemas strictly reused from `academia_audio.schemas`.
+- [x] **No recordings or secrets committed:** Clean git tree with zero audio artifacts or committed virtual environments.
+
+---
+
+## 5. Automated Test Suite Results (199 Passed)
+
+Executed in a clean virtual environment with `pip install -e ".[dev]"` (no `SpeechRecognition` installed):
+
+```text
 ============================= test session starts =============================
 platform win32 -- Python 3.12.8, pytest-9.2.0, pluggy-1.7.0
 rootdir: C:\Users\sures\Desktop\SDE-4
@@ -52,15 +104,3 @@ tests/test_vad.py ...........                                            [100%]
 
 ============================= 199 passed in 0.70s =============================
 ```
-
----
-
-### Acceptance Criteria Verification
-
-- [x] **Chunk to transcript events works end to end in mock mode:** Verified via `TranscriptionOrchestrator` and `demo_w2.py`.
-- [x] **Out-of-order and duplicate segments are handled correctly; interim results reconcile into final ones:** Verified by 10 tests in `test_dedup.py`.
-- [x] **Timeouts and bounded retries work; provider errors are normalized (no raw exceptions leak):** Verified by 16 tests in `test_retry.py` and orchestrator error boundary tests.
-- [x] **Resampling and normalization are tested:** Verified by 16 tests in `test_preprocessing.py` (downsampling, upsampling, silence handling, gain scaling).
-- [x] **Contract tests cover the adapter and events; the default path needs no real provider or API key:** Verified in `test_orchestrator.py` with 100% offline deterministic execution.
-- [x] **No duplicate schema definitions:** Reuses W1 `AudioChunk` and `AudioFormat` from `academia_audio.schemas` without redefining them.
-- [x] **No recordings or secrets committed:** Checked via `git status` / `git ls-files`.
