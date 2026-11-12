@@ -1,10 +1,14 @@
-from app.config import settings
-from datetime import datetime, timezone
-from threading import Lock
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
 import json
 import asyncio
+
+from datetime import datetime, timezone
+from threading import Lock
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+
+from app.config import settings
+
 
 router = APIRouter()
 
@@ -15,6 +19,9 @@ MAX_PAYLOAD_SIZE = settings.max_event_payload_size
 
 
 def add_event(session_id: str, event_type: str, data: dict):
+
+    if not isinstance(data, dict):
+        raise ValueError("Event data must be a dictionary")
 
     payload = json.dumps(data)
 

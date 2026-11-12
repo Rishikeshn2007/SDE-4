@@ -5,6 +5,7 @@ from threading import Lock
 import logging
 
 from app.errors import ErrorEnvelope
+from app.config import settings
 from app.middleware import RequestCorrelationMiddleware
 
 from app.sessions import (
@@ -142,6 +143,11 @@ async def create_session(
         alias="Idempotency-Key",
     ),
 ):
+    if not settings.mock_mode:
+        raise HTTPException(
+            status_code=503,
+            detail="Mock mode is disabled and live mode is not configured",
+        )
 
     if payload.mode != "mock":
         raise HTTPException(
@@ -150,7 +156,6 @@ async def create_session(
         )
 
     if idempotency_key:
-
         if len(idempotency_key) > 128:
             raise HTTPException(
                 status_code=400,
@@ -158,13 +163,11 @@ async def create_session(
             )
 
         with idempotency_lock:
-
             if idempotency_key in idempotency_store:
                 logger.info("Duplicate idempotent request received")
                 return idempotency_store[idempotency_key]
 
             session = repository.create()
-
             result = session.model_dump(mode="json")
 
             add_event(
@@ -175,11 +178,7 @@ async def create_session(
 
             idempotency_store[idempotency_key] = result
 
-            logger.info(
-                "Session created: %s",
-                session.session_id,
-            )
-
+            logger.info("Session created: %s", session.session_id)
             return result
 
     session = repository.create()
@@ -190,10 +189,7 @@ async def create_session(
         {"state": "created"},
     )
 
-    logger.info(
-        "Session created: %s",
-        session.session_id,
-    )
+    logger.info("Session created: %s", session.session_id)
 
     return session.model_dump(mode="json")
 

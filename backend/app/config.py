@@ -3,13 +3,21 @@ import os
 
 class Settings:
     def __init__(self):
-        self.environment = os.getenv("APP_ENV", "development")
+        self.environment = os.getenv(
+            "APP_ENV", "development"
+        )
+
         self.session_ttl_minutes = int(
             os.getenv("SESSION_TTL_MINUTES", "30")
         )
+
         self.max_event_payload_size = int(
             os.getenv("MAX_EVENT_PAYLOAD_SIZE", "4096")
         )
+
+        self.mock_mode = os.getenv(
+            "MOCK_MODE", "true"
+        ).lower() in ("true", "1", "yes")
 
         self.validate()
 
