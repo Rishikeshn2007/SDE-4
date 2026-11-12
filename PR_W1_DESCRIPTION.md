@@ -70,3 +70,4 @@ tests/test_source_and_chunker.py .......................                 [ 94%]
 
 - All adapter contract tests pass.
 - Package imports and `FakeTranscriber` function cleanly with zero third-party packages installed.
+
