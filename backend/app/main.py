@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Header
+from fastapi.routing import APIRoute
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from threading import Lock
@@ -33,6 +34,41 @@ app = FastAPI(
     description="Backend API with mock session management",
     version="1.0.0",
 )
+
+class PayloadLimitRoute(APIRoute):
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
+
+        async def custom_handler(request: Request):
+            body = await request.body()
+
+            if len(body) > settings.max_event_payload_size:
+                error = ErrorEnvelope(
+                    code="PAYLOAD_TOO_LARGE",
+                    message_safe_for_user="Request payload is too large.",
+                    retryable=False,
+                    correlation_id=getattr(
+                        request.state,
+                        "correlation_id",
+                        "unknown",
+                    ),
+                    details_redacted={
+                        "max_size": settings.max_event_payload_size,
+                        "actual_size": len(body),
+                    },
+                )
+
+                return JSONResponse(
+                    status_code=413,
+                    content={"error": error.model_dump()},
+                )
+
+            return await original_handler(request)
+
+        return custom_handler
+
+
+app.router.route_class = PayloadLimitRoute
 
 app.add_middleware(RequestCorrelationMiddleware)
 

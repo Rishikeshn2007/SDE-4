@@ -9,7 +9,7 @@ from app.sessions import (
     SessionState,
     InvalidSessionTransition,
 )
-from app.events import add_event, events_store
+from app.events import add_event
 from app.config import Settings
 
 import app.sessions as sessions_module
@@ -148,8 +148,7 @@ def test_invalid_session_state():
     assert response.status_code == 400
 
 
-# NEW REVIEWER-REQUESTED TESTS
-
+# REVIEWER-REQUESTED SESSION TESTS
 
 def test_illegal_session_transition():
     repository = SessionRepository()
@@ -196,7 +195,10 @@ def test_illegal_resume_transition():
     repository.update_state(session.session_id, SessionState.COMPLETED)
 
     with pytest.raises(InvalidSessionTransition):
-        repository.update_state(session.session_id, SessionState.ACTIVE)
+        repository.update_state(
+            session.session_id,
+            SessionState.ACTIVE,
+        )
 
 
 def test_session_expiry(monkeypatch):
@@ -214,6 +216,8 @@ def test_session_expiry(monkeypatch):
     assert expired.state == SessionState.EXPIRED
 
 
+# REVIEWER-REQUESTED EVENT TESTS
+
 def test_oversized_event_payload():
     large_data = {
         "message": "A" * (
@@ -227,20 +231,6 @@ def test_oversized_event_payload():
             "test_event",
             large_data,
         )
-
-
-def test_invalid_configuration(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "invalid")
-
-    with pytest.raises(ValueError):
-        Settings()
-
-
-def test_invalid_session_ttl_configuration(monkeypatch):
-    monkeypatch.setenv("SESSION_TTL_MINUTES", "0")
-
-    with pytest.raises(ValueError):
-        Settings()
 
 
 def test_event_streaming_order():
@@ -263,3 +253,46 @@ def test_event_streaming_order():
     third = content.index("third_event")
 
     assert first < second < third
+
+
+# CONFIGURATION TESTS
+
+def test_invalid_configuration(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "invalid")
+
+    with pytest.raises(ValueError):
+        Settings()
+
+
+def test_invalid_session_ttl_configuration(monkeypatch):
+    monkeypatch.setenv("SESSION_TTL_MINUTES", "0")
+
+    with pytest.raises(ValueError):
+        Settings()
+
+
+# NEW API-LEVEL PAYLOAD SIZE TEST
+
+def test_oversized_api_request_returns_413_with_correlation_id():
+    large_payload = {
+        "mode": "mock",
+        "extra_data": "A" * 5000,
+    }
+
+    correlation_id = "test-correlation-123"
+
+    response = client.post(
+        "/sessions",
+        json=large_payload,
+        headers={
+            "X-Correlation-ID": correlation_id,
+        },
+    )
+
+    assert response.status_code == 413
+
+    error = response.json()["error"]
+
+    assert error["code"] == "PAYLOAD_TOO_LARGE"
+    assert error["correlation_id"] == correlation_id
+    assert error["retryable"] is False
