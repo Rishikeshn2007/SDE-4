@@ -73,3 +73,11 @@ SDE-4/
 │
 
 └── README.md
+## Running the Backend in Mock Mode
+
+Make sure Python 3.12 and the backend dependencies are installed.
+
+From the project root directory, run:
+
+```bash
+python backend/run_mock.py
