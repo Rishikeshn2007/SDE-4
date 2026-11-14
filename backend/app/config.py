@@ -19,6 +19,18 @@ class Settings:
             "MOCK_MODE", "true"
         ).lower() in ("true", "1", "yes")
 
+        self.rate_limit_requests = int(
+            os.getenv("RATE_LIMIT_REQUESTS", "10")
+        )
+
+        self.rate_limit_window = int(
+            os.getenv("RATE_LIMIT_WINDOW", "60")
+        )
+
+        self.local_auth_token = os.getenv(
+            "LOCAL_AUTH_TOKEN", "dev-local-token"
+        )
+
         self.validate()
 
     def validate(self):
@@ -30,6 +42,16 @@ class Settings:
         if self.max_event_payload_size <= 0:
             raise ValueError(
                 "MAX_EVENT_PAYLOAD_SIZE must be positive"
+            )
+
+        if self.rate_limit_requests <= 0:
+            raise ValueError(
+                "RATE_LIMIT_REQUESTS must be positive"
+            )
+
+        if self.rate_limit_window <= 0:
+            raise ValueError(
+                "RATE_LIMIT_WINDOW must be positive"
             )
 
         if self.environment not in (

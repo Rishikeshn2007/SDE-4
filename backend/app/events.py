@@ -1,10 +1,11 @@
+
 import json
 import asyncio
 
 from datetime import datetime, timezone
 from threading import Lock
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import StreamingResponse
 
 from app.config import settings
@@ -28,21 +29,36 @@ def add_event(session_id: str, event_type: str, data: dict):
     if len(payload.encode("utf-8")) > MAX_PAYLOAD_SIZE:
         raise ValueError("Event payload is too large")
 
-    event = {
-        "session_id": session_id,
-        "event_type": event_type,
-        "data": data,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-
     with events_lock:
-        events_store.setdefault(session_id, []).append(event)
+        session_events = events_store.setdefault(session_id, [])
+
+        event = {
+            "id": len(session_events) + 1,
+            "session_id": session_id,
+            "event_type": event_type,
+            "data": data,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        session_events.append(event)
 
     return event
 
 
 @router.get("/sessions/{session_id}/events")
-async def stream_events(session_id: str):
+async def stream_events(
+    session_id: str,
+    last_event_id: int = Header(
+        default=0,
+        alias="Last-Event-ID",
+    ),
+):
+
+    if last_event_id < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid event ID",
+        )
 
     with events_lock:
         if session_id not in events_store:
@@ -51,15 +67,23 @@ async def stream_events(session_id: str):
                 detail="No events found for this session",
             )
 
-        events = list(events_store[session_id])
+        events = [
+            event
+            for event in events_store[session_id]
+            if event["id"] > last_event_id
+        ]
 
     async def event_generator():
 
         for event in events:
+            yield f"id: {event['id']}\n"
+            yield f"event: {event['event_type']}\n"
             yield f"data: {json.dumps(event)}\n\n"
+
             await asyncio.sleep(0.1)
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
     )

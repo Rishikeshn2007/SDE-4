@@ -8,6 +8,7 @@ import logging
 from app.errors import ErrorEnvelope
 from app.config import settings
 from app.middleware import RequestCorrelationMiddleware
+from app.security import SecurityMiddleware
 
 from app.sessions import (
     CreateSessionRequest,
@@ -20,6 +21,10 @@ from app.events import router as events_router
 from app.events import add_event
 
 from app.logging_config import setup_logging
+from app.gateways.audio import AudioGateway
+from app.gateways.transcription import TranscriptionGateway
+from app.gateways.reasoning import ReasoningGateway
+from app.gateways.workflow import WorkflowGateway
 
 
 # Configure logging
@@ -34,6 +39,7 @@ app = FastAPI(
     description="Backend API with mock session management",
     version="1.0.0",
 )
+
 
 class PayloadLimitRoute(APIRoute):
     def get_route_handler(self):
@@ -70,6 +76,8 @@ class PayloadLimitRoute(APIRoute):
 
 app.router.route_class = PayloadLimitRoute
 
+# Register middleware
+app.add_middleware(SecurityMiddleware)
 app.add_middleware(RequestCorrelationMiddleware)
 
 app.include_router(events_router)
@@ -77,6 +85,11 @@ app.include_router(events_router)
 
 # Repository and idempotency storage
 repository = SessionRepository()
+
+audio_gateway = AudioGateway()
+transcription_gateway = TranscriptionGateway()
+reasoning_gateway = ReasoningGateway()
+workflow_gateway = WorkflowGateway()
 
 idempotency_store = {}
 idempotency_lock = Lock()
@@ -344,3 +357,55 @@ async def stop_session(
             "INVALID_SESSION_TRANSITION",
             str(exc),
         )
+
+
+# Process session through all module gateways
+@app.post("/sessions/{session_id}/process")
+async def process_session(
+    session_id: str,
+    request: Request,
+):
+
+    session = repository.get(session_id)
+
+    if session is None:
+        return make_error_response(
+            request,
+            404,
+            "SESSION_NOT_FOUND",
+            "The requested session was not found.",
+        )
+
+    correlation_id = getattr(
+        request.state,
+        "correlation_id",
+        "unknown",
+    )
+
+    results = []
+
+    gateways = [
+        audio_gateway,
+        transcription_gateway,
+        reasoning_gateway,
+        workflow_gateway,
+    ]
+
+    for gateway in gateways:
+        result = gateway.process(session_id, correlation_id)
+        results.append(result)
+
+        add_event(
+            session_id,
+            "gateway_processed",
+            result,
+        )
+
+    logger.info("All gateways processed session: %s", session_id)
+
+    return {
+        "session_id": session_id,
+        "correlation_id": correlation_id,
+        "status": "success",
+        "modules": results,
+    }
