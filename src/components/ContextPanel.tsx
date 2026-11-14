@@ -1,8 +1,15 @@
 
-import { useState } from 'react'
 
-function ContextPanel() {
-  const [screenContextEnabled, setScreenContextEnabled] = useState(false)
+
+type ContextPanelProps = {
+  screenContextEnabled: boolean
+  setScreenContextEnabled: (enabled: boolean) => void
+}
+
+function ContextPanel({
+  screenContextEnabled,
+  setScreenContextEnabled,
+}: ContextPanelProps) {
 
   return (
     <section className="panel" aria-labelledby="context-heading">

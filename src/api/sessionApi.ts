@@ -15,6 +15,15 @@ export type SessionResponse = {
   events: TranscriptEvent[]
 }
 
+export type StreamStatus = 'connected' | 'closed'
+
+type MockEventStreamOptions = {
+  afterEventId?: number
+  intervalMs?: number
+  onEvent: (event: TranscriptEvent) => void
+  onStatusChange?: (status: StreamStatus) => void
+}
+
 const mockEvents: TranscriptEvent[] = [
   {
     id: 1,
@@ -61,5 +70,42 @@ export async function getMockSession(): Promise<SessionResponse> {
     events: [...mockEvents].sort((a, b) =>
       a.timestamp.localeCompare(b.timestamp),
     ),
+  }
+}
+
+export function subscribeToMockEvents({
+  afterEventId = 0,
+  intervalMs = 1000,
+  onEvent,
+  onStatusChange,
+}: MockEventStreamOptions) {
+  let lastEventId = afterEventId
+  let closed = false
+
+  onStatusChange?.('connected')
+
+  const timer = setInterval(() => {
+    if (closed) return
+
+    const nextEvent = mockEvents.find(
+      (event) => event.id > lastEventId,
+    )
+
+    if (!nextEvent) {
+      clearInterval(timer)
+      onStatusChange?.('closed')
+      return
+    }
+
+    lastEventId = nextEvent.id
+    onEvent(nextEvent)
+  }, intervalMs)
+
+  return {
+    close() {
+      closed = true
+      clearInterval(timer)
+      onStatusChange?.('closed')
+    },
   }
 }
