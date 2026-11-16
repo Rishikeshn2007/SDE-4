@@ -1,4 +1,4 @@
-"""Week 3 integration demo using synthetic data only."""
+"""Week 3 end-to-end integration demo using synthetic data only."""
 
 from datetime import datetime, timezone
 
@@ -10,74 +10,70 @@ from schemas.context import (
 )
 
 from adapters.capture import CaptureAdapter, SyntheticFrame
+from adapters.vision import MockVisionAdapter
 
 from observations.observation_builder import (
     ObservationInput,
     ObservationBuilder,
 )
-
 from observations.consent_manager import ConsentManager
 
 from reasoning.grounded_answer import GroundedAnswerGenerator
-
 from workflow.planner import WorkflowPlanner
 from workflow.handoff import WorkflowHandoff
 
 
 def main():
+    print("=" * 60)
+    print("WEEK 3 - END-TO-END INTEGRATION DEMO")
+    print("=" * 60)
 
-    print("=" * 55)
-    print("WEEK 3 - CONTEXT AND REASONING INTEGRATION DEMO")
-    print("=" * 55)
-
-    # 1. Create capture adapter with consent disabled.
-    print("\n1. Initializing synthetic capture...")
-
+    # 1. Initialize capture and vision adapters.
     capture = CaptureAdapter(
         opt_in=False,
         sample_every_n=1,
         max_frame_bytes=1024,
     )
 
-    consent_manager = ConsentManager(
-        capture_adapter=capture
-    )
+    vision = MockVisionAdapter()
+    consent = ConsentManager(capture_adapter=capture)
 
-    print("Capture enabled initially:", capture.opt_in)
+    print("\n1. Initial capture state:", capture.opt_in)
 
-    # 2. Enable consent and process a synthetic frame.
-    print("\n2. Enabling consent...")
+    # 2. Explicitly enable consent.
+    consent.enable_consent()
 
-    consent_manager.enable_consent()
+    print("2. Consent enabled:", consent.consent_enabled)
 
+    # 3. Process synthetic frame.
     frame = SyntheticFrame(
-        frame_id="demo_frame_001",
-        data=b"synthetic project information",
+        frame_id="week3_frame_001",
+        data=b"The project uses Python and includes automated unit tests.",
     )
 
     captured_frame = capture.process_frame(frame)
 
-    print("Consent enabled:", consent_manager.consent_enabled)
-    print("Synthetic frame captured:", captured_frame is not None)
+    if captured_frame is None:
+        raise RuntimeError("Synthetic frame was not captured")
 
-    # 3. Build timestamped observations.
-    print("\n3. Building timestamped observations...")
+    print("3. Synthetic frame captured:", captured_frame.frame_id)
 
+    # 4. Extract text using mock vision/OCR.
+    extracted_text = vision.extract_text(captured_frame)
+
+    print("4. Extracted text:", extracted_text)
+
+    # 5. Convert extracted text into a source-linked observation.
     now = datetime.now(timezone.utc)
 
     item = ContextItem(
-        item_id="demo_item_001",
-        content="The project uses Python and includes automated unit tests.",
+        item_id="week3_item_001",
+        content=extracted_text,
         source=SourceReference(
-            source_id="demo_source_001",
-            source_type="synthetic",
-            description="Synthetic project information",
+            source_id="week3_source_001",
+            source_type="synthetic_frame",
+            description="Text extracted from a synthetic frame",
         ),
-    )
-
-    observation_input = ObservationInput(
-        item=item,
-        timestamp=now,
     )
 
     observation_builder = ObservationBuilder(
@@ -85,77 +81,84 @@ def main():
     )
 
     observations = observation_builder.build(
-        [observation_input],
+        [
+            ObservationInput(
+                item=item,
+                timestamp=now,
+            )
+        ],
         now=now,
     )
 
     for observation in observations:
-        consent_manager.add_observation(observation)
+        consent.add_observation(observation)
 
-    pending = consent_manager.get_pending_observations()
+    pending = consent.get_pending_observations()
 
-    print("Observations created:", len(observations))
-    print("Pending observations:", len(pending))
+    print("5. Timestamped observations:", len(pending))
 
-    # 4. Build reasoning request from consented observations.
-    print("\n4. Preparing reasoning request...")
-
+    # 6. Build context only from consented observations.
     context = ScreenContext(
-        context_id="demo_context_001",
+        context_id="week3_context_001",
         items=[observation.item for observation in pending],
         capture_enabled=False,
     )
 
     request = ReasoningRequest(
-        request_id="demo_request_001",
-        question="What programming language does the project use?",
+        request_id="week3_request_001",
+        question="Which programming language does the project use?",
         context=context,
     )
 
-    # 5. Generate grounded answer.
-    print("\n5. Generating grounded answer...")
+    # 7. Generate a grounded answer.
+    generator = GroundedAnswerGenerator()
+    result = generator.generate(request)
 
-    answer_generator = GroundedAnswerGenerator()
-    result = answer_generator.generate(request)
+    print("\n6. Grounded answer:")
+    print(result.answer)
+    print("Source references:", result.source_ids)
 
-    print("Answer:", result.answer)
-    print("Source IDs:", result.source_ids)
-
-    # 6. Create a workflow proposal.
-    print("\n6. Creating workflow proposal...")
-
+    # 8. Create a workflow proposal.
     planner = WorkflowPlanner()
 
     proposal = planner.create_proposal(
         request=request,
         action_type="create_note",
-        description="Create a note about the project technology.",
+        description="Create a note summarizing the project technology.",
         source_ids=result.source_ids,
     )
 
-    # 7. Submit proposal for approval.
-    print("\n7. Performing mock workflow handoff...")
-
+    # 9. Submit proposal for explicit approval.
     handoff = WorkflowHandoff()
-    handoff_result = handoff.submit(proposal)
+    submission = handoff.submit(proposal)
 
-    print("Handoff result:", handoff_result)
+    print("\n7. Workflow submission:")
+    print(submission)
+
     print("Pending proposals:", len(handoff.get_pending()))
 
-    # 8. Demonstrate consent withdrawal.
-    print("\n8. Withdrawing consent...")
+    # 10. Demonstrate approval separately.
+    approval = handoff.approve(proposal.proposal_id)
 
-    consent_manager.withdraw_consent()
+    print("\n8. Workflow approval:")
+    print(approval)
 
-    print("Consent enabled:", consent_manager.consent_enabled)
+    print("Approved proposals:", len(handoff.get_approved()))
+    print("Real action executed:", approval["executed"])
+
+    # 11. Withdraw consent and clear pending observations.
+    consent.withdraw_consent()
+
+    print("\n9. Consent withdrawal:")
+    print("Consent enabled:", consent.consent_enabled)
     print("Capture enabled:", capture.opt_in)
-    print("Pending observations:", len(
-        consent_manager.get_pending_observations()
+    print("Remaining observations:", len(
+        consent.get_pending_observations()
     ))
 
-    print("\n" + "=" * 55)
+    print("\n" + "=" * 60)
     print("WEEK 3 INTEGRATION DEMO COMPLETED")
-    print("=" * 55)
+    print("=" * 60)
 
 
 if __name__ == "__main__":
