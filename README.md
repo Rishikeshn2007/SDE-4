@@ -1,146 +1,169 @@
-# Context and Reasoning System
+# SDE-4 – Context and Reasoning Voicebot
 
 ## Project Overview
 
-This project implements a context-aware reasoning system that processes synthetic context information and generates responses using a mock reasoning and LLM architecture.
+This project develops a context-aware reasoning system that processes synthetic context information, generates grounded answers, and prepares safe workflow proposals.
 
-The project is developed in two weeks:
+The project is developed in three stages: Week 1, Week 2, and Week 3.
 
-- Week 1: Context schemas and mock reasoning.
-- Week 2: Opt-in capture adapter, vision adapter, context builder, and LLM adapter.
+The system uses mock implementations and synthetic data for development and testing.
 
-## Objectives
+## Week 1 – Context and Reasoning Foundation
 
-1. Create structured context schemas.
-2. Process context using mock reasoning.
-3. Implement opt-in synthetic frame capture.
-4. Extract text through a mock vision adapter.
-5. Build bounded context using recency and relevance.
-6. Implement a mock-first LLM adapter.
-7. Validate generated responses.
-8. Test timeout, retry, and invalid output handling.
+- Defined reusable context schemas.
+- Created source references and context items.
+- Implemented reasoning requests and results.
+- Developed deterministic mock reasoning.
+- Added validation and unit tests.
+
+## Week 2 – Capture Adapter, Context Builder and LLM Adapter
+
+- Implemented opt-in capture adapter interfaces.
+- Added synthetic frame processing.
+- Created bounded context selection.
+- Implemented recency and relevance filtering.
+- Added stale context filtering.
+- Developed a mock LLM adapter.
+- Added timeout, retry, and structured validation tests.
+
+## Week 3 – Source-Linked Observations and Workflow Handoff
+
+### Days 15–16: Observation Management
+
+- Created timestamped observations.
+- Linked observations to their original sources.
+- Added stale observation filtering.
+- Added duplicate observation handling.
+- Implemented consent management.
+- Added pending-context clearing when consent is withdrawn.
+
+### Days 17–18: Grounded Answers
+
+- Generated answers using available context.
+- Included source IDs in reasoning results.
+- Added explicit no-evidence responses.
+- Prevented answers from being based on unsupported information.
+
+### Days 19–20: Prompt Injection Protection and Workflow Handoff
+
+- Treated captured context as untrusted data.
+- Created a validated WorkflowProposal schema.
+- Added workflow proposal planning.
+- Implemented mock workflow handoff.
+- Required explicit confirmation.
+- Prevented automatic workflow execution.
+
+### Day 21: Integration
+
+- Integrated observations and consent management.
+- Connected grounded answer generation.
+- Integrated workflow proposal creation and handoff.
+- Created a synthetic integration demo.
 
 ## Project Structure
 
 ```text
-w3-context-reasoning/
+SDE-4/
 │
 ├── adapters/
-│   ├── __init__.py
 │   ├── capture.py
 │   └── vision.py
 │
 ├── context_builder/
-│   ├── __init__.py
 │   └── builder.py
 │
+├── examples/
+│   ├── demo.py
+│   ├── synthetic_frames.py
+│   └── week3_demo.py
+│
 ├── llm/
-│   ├── __init__.py
 │   └── client.py
 │
-├── schemas/
-│   └── context.py
-│
-├── reasoning/
-│   └── mock_reasoning.py
+├── observations/
+│   ├── observation_builder.py
+│   └── consent_manager.py
 │
 ├── prompts/
 │   └── prompt_v1.json
 │
+├── reasoning/
+│   ├── mock_reasoning.py
+│   └── grounded_answer.py
+│
+├── schemas/
+│   ├── context.py
+│   └── workflow.py
+│
+├── workflow/
+│   ├── planner.py
+│   └── handoff.py
+│
 ├── tests/
 │   ├── test_schemas.py
 │   ├── test_reasoning.py
-│   └── test_week2.py
-│
-├── examples/
-│   ├── demo.py
-│   └── synthetic_frames.py
+│   ├── test_week2.py
+│   ├── test_week3_observations.py
+│   ├── test_week3_grounded_answers.py
+│   └── test_week3_workflow.py
 │
 ├── README.md
 └── .gitignore
 ```
 
-## Week 1 Implementation
+## Technologies Used
 
-- Created reusable context schemas.
-- Implemented source references and context items.
-- Added request and result validation.
-- Implemented deterministic mock reasoning.
-- Added versioned prompts.
-- Added automated unit tests.
-
-## Week 2 Implementation
-
-### 1. Capture Adapter
-- Capture is disabled by default.
-- Requires explicit opt-in.
-- Uses synthetic frames only.
-- Implements frame sampling.
-- Enforces maximum frame size.
-
-### 2. Vision Adapter
-- Provides a mock OCR interface.
-- Extracts text from synthetic frame data.
-- Handles invalid text encoding.
-
-### 3. Context Builder
-- Filters stale context.
-- Uses query relevance.
-- Sorts context using relevance and recency.
-- Enforces token budget.
-- Limits the number of context items.
-
-### 4. LLM Adapter
-- Uses mock mode by default.
-- Implements timeout handling.
-- Supports bounded retries.
-- Validates structured output.
-- Rejects unknown and duplicate source IDs.
-- Rejects malformed responses and certain unsafe markup.
-
-## Privacy and Safety
-
-- No real screenshots are captured.
-- Only synthetic frames are used.
-- Capture requires explicit opt-in.
-- Screen capture remains disabled in the project schemas.
-- Mock LLM mode requires no API key.
-- Generated output is checked before acceptance.
+- Python
+- Dataclasses
+- Unit Testing
+- Mock Reasoning
+- Synthetic Context Data
+- Context Validation
 
 ## Running the Project
 
-Run the complete demonstration:
+### Run the Week 3 Integration Demo
 
 ```bash
-python examples/demo.py
+python -m examples.week3_demo
 ```
 
-Run all automated tests:
+### Run the Complete Test Suite
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-Run Week 2 tests:
+## Testing
 
-```bash
-python -m unittest tests.test_week2 -v
-```
+The project has been developed with automated unit tests covering:
 
-## Testing Results
+- Schema validation
+- Reasoning functionality
+- Context building
+- Observation timestamps
+- Stale and duplicate observation filtering
+- Consent management
+- Grounded answers
+- Source references
+- No-evidence responses
+- Workflow proposal validation
+- Mock workflow handoff
 
-| Test Category | Passed |
-|---|---:|
-| Week 1 | 16 |
-| Week 2 | 15 |
-| Total | 31 |
+The latest reported test count is 60 tests.
 
-**Overall Result: 31 tests passed successfully.**
+## Safety and Privacy
 
-The Week 1 and Week 2 demonstrations also completed successfully.
+- Capture remains disabled by default.
+- Only synthetic data is used in the integration demo.
+- Context content is treated as untrusted data.
+- Answers are grounded in available context.
+- Workflow proposals require confirmation.
+- Workflow actions are not automatically executed.
+- No external LLM provider or API key is required for the mock demo.
 
 ## Conclusion
 
-The project successfully implements a context and reasoning system with structured schemas, synthetic capture, mock vision processing, bounded context selection, and a mock-first LLM adapter.
+The SDE-4 Context and Reasoning project demonstrates a modular approach to context processing, evidence-based answers, and safe workflow handoff.
 
-The implementation includes timeout handling, retry support, structured output validation, and automated testing.
+The three development stages establish a foundation for a context-aware voice assistant with source-linked information and controlled workflow proposals.

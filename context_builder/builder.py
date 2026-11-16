@@ -17,9 +17,9 @@ class ContextBuilder:
 
     def __init__(
         self,
-        token_budget=200,
-        max_items=10,
-        max_age_seconds=86400,
+        token_budget: int = 200,
+        max_items: int = 10,
+        max_age_seconds: int = 86400,
     ):
         if token_budget < 1 or max_items < 1 or max_age_seconds < 1:
             raise ValueError("Limits must be positive")
@@ -28,11 +28,11 @@ class ContextBuilder:
         self.max_items = max_items
         self.max_age_seconds = max_age_seconds
 
-    def estimate_tokens(self, text):
-        """Approximate tokens using whitespace-separated words."""
+    def estimate_tokens(self, text: str) -> int:
+        """Estimate tokens using whitespace-separated words."""
         return len(text.split())
 
-    def build(self, context_id, entries, query=""):
+    def build(self, context_id: str, entries: list, query: str = ""):
         now = datetime.now(timezone.utc)
 
         if not isinstance(entries, list):
@@ -45,28 +45,36 @@ class ContextBuilder:
             if not isinstance(entry, ContextEntry):
                 raise ValueError("Invalid context entry")
 
-            entry.item.validate()
+            if not isinstance(entry.timestamp, datetime):
+                raise ValueError("Timestamp must be a datetime object")
 
             if entry.timestamp.tzinfo is None:
                 raise ValueError("Timestamp must include timezone")
 
             age = (now - entry.timestamp).total_seconds()
 
+            if age < 0:
+                raise ValueError("Timestamp cannot be in the future")
+
             if age > self.max_age_seconds:
                 continue
 
-            words = set(entry.item.content.lower().split())
+            entry.item.validate()
 
-            score = (
-                len(query_words & words) / len(query_words)
-                if query_words else 0.0
+            content_words = set(entry.item.content.lower().split())
+
+            if query_words:
+                score = len(query_words & content_words) / len(query_words)
+            else:
+                score = entry.relevance
+
+            valid_entries.append(
+                (score, entry.timestamp, entry.item)
             )
 
-            valid_entries.append((score, entry.timestamp, entry.item))
-
-        # Prefer relevant information, then recent information.
+        # Sort by relevance first and recency second.
         valid_entries.sort(
-            key=lambda x: (x[0], x[1]),
+            key=lambda entry: (entry[0], entry[1]),
             reverse=True
         )
 
@@ -74,10 +82,10 @@ class ContextBuilder:
         used_tokens = 0
 
         for score, timestamp, item in valid_entries:
-            tokens = self.estimate_tokens(item.content)
-
             if len(selected) >= self.max_items:
                 break
+
+            tokens = self.estimate_tokens(item.content)
 
             if used_tokens + tokens <= self.token_budget:
                 selected.append(item)
