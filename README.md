@@ -3,13 +3,39 @@
 ## W4 – Agentic Workflow
 
 ### Project Overview
+
 A Python project demonstrating an agentic workflow.
 
 ### Features
+
 - Workflow plan and step definitions
 - Workflow state management
 - Plan validation
 - Mock calculator
+- Mock note preview
+- Human approval for consequential steps
+- Safe mock-only execution
+
+### Technologies
+
+- Python
+- Pytest
+
+### Run the Demo
+
+```bash
+py demo.py
+```
+
+### Run Tests
+
+```bash
+py -m pytest tests -v
+```
+
+### Safety
+
+Only mock tools are used. Consequential steps require explicit approval.
 
 ---
 
@@ -87,4 +113,4 @@ The project includes tests for:
 
 This is a frontend mock-mode demonstration. Microphone permission is requested only through a separate user action, and the microphone stream is stopped immediately. No audio is recorded or uploaded.
 
-The backend mock session integration uses the FastAPI development server.
+The screen context setting is a user preference; screen capture is not implemented. The backend mock session integration uses the FastAPI development server.
