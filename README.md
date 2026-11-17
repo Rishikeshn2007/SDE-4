@@ -1,14 +1,29 @@
-# Session Studio
+# SDE-4 – Agentic Workflow and Session Studio
+
+## W4 – Agentic Workflow
+
+### Project Overview
+A Python project demonstrating an agentic workflow.
+
+### Features
+- Workflow plan and step definitions
+- Workflow state management
+- Plan validation
+- Mock calculator
+
+---
+
+## W6 – Session Studio
 
 **Team SDE 4 – Workstream W6: Frontend and UX**
 
-## Project Overview
+### Project Overview
 
 Session Studio is an accessible frontend dashboard for managing voice sessions in mock mode. It demonstrates session controls, microphone permission states, and a transcript timeline using mock fixture data.
 
 Mock mode is enabled by default. No real audio is recorded or uploaded.
 
-## Features
+### Features
 
 - Accessible application layout with a skip link.
 - Mock-mode status banner.
@@ -17,9 +32,11 @@ Mock mode is enabled by default. No real audio is recorded or uploaded.
 - Mock transcript timeline.
 - Typed API client with mock responses.
 - API error handling.
+- Backend mock session and event stream integration.
+- Privacy settings for screen context and microphone capture.
 - Component-based React architecture.
 
-## Technologies Used
+### Technologies Used
 
 - React
 - TypeScript
@@ -27,8 +44,9 @@ Mock mode is enabled by default. No real audio is recorded or uploaded.
 - Vitest
 - React Testing Library
 - CSS
+- FastAPI mock backend
 
-## Project Setup
+### Project Setup
 
 Install dependencies:
 
@@ -42,19 +60,19 @@ Start the development server:
 npm.cmd run dev
 ```
 
-## Running Tests
+### Running Tests
 
 ```bash
 npm.cmd test
 ```
 
-## Production Build
+### Production Build
 
 ```bash
 npm.cmd run build
 ```
 
-## Testing
+### Testing
 
 The project includes tests for:
 
@@ -62,7 +80,11 @@ The project includes tests for:
 - Transcript event timestamp ordering.
 - Application heading.
 - Mock-mode banner.
+- Privacy settings.
+- Approval rejection without execution.
 
-## Important Note
+### Important Note
 
-This is a frontend mock-mode demonstration. Microphone permission is requested only to demonstrate browser permission states. The microphone stream is stopped immediately, and no audio is recorded or uploaded.
+This is a frontend mock-mode demonstration. Microphone permission is requested only through a separate user action, and the microphone stream is stopped immediately. No audio is recorded or uploaded.
+
+The backend mock session integration uses the FastAPI development server.
