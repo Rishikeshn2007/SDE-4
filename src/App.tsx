@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import {
   subscribeToMockEvents,
+  createBackendSession,
+  processBackendSession,
+  subscribeToBackendEvents,
   type TranscriptEvent,
+  type BackendEvent,
 } from './api/sessionApi'
 import SessionControls from './components/SessionControls'
 import MicrophonePermission from './components/MicrophonePermission'
@@ -20,6 +24,7 @@ function App() {
   const [status, setStatus] = useState<SessionStatus>('Idle')
   const [isApprovalOpen, setIsApprovalOpen] = useState(false)
   const [screenContextEnabled, setScreenContextEnabled] = useState(false)
+  const [microphoneCaptureEnabled, setMicrophoneCaptureEnabled] = useState(false)
 const [approvalMessage, setApprovalMessage] = useState('')
 function handleApprove() {
   setApprovalMessage('Approved. The workflow is ready to proceed.')
@@ -79,6 +84,14 @@ function handleReject() {
   )
   const [transcriptEvents, setTranscriptEvents] =
     useState<TranscriptEvent[]>([])
+    const [backendEvents, setBackendEvents] = useState<BackendEvent[]>([])
+const [backendSessionId, setBackendSessionId] = useState('')
+const [backendLoading, setBackendLoading] = useState(false)
+const [backendError, setBackendError] = useState('')
+const backendLastEventIdRef = useRef(0)
+const backendSubscriptionRef = useRef<ReturnType<
+  typeof subscribeToBackendEvents
+> | null>(null)
     const [streamStatus, setStreamStatus] =
   useState<'connected' | 'closed' | 'disconnected'>('closed')
 
@@ -218,6 +231,61 @@ startMockStream(0)
       setIsLoading(false)
     }
   }
+  async function startBackendSession() {
+  if (!navigator.onLine) {
+    setBackendError('You are offline. Please reconnect.')
+    return
+  }
+
+  try {
+    setBackendLoading(true)
+    setBackendError('')
+    setBackendEvents([])
+    backendLastEventIdRef.current = 0
+
+    backendSubscriptionRef.current?.close()
+    backendSubscriptionRef.current = null
+
+    const session = await createBackendSession()
+    setBackendSessionId(session.session_id)
+
+    await processBackendSession(session.session_id)
+
+    backendSubscriptionRef.current = subscribeToBackendEvents(
+      session.session_id,
+      {
+        afterEventId: 0,
+
+        onEvent: (event) => {
+          setBackendEvents((previous) => {
+            if (previous.some((item) => item.id === event.id)) {
+              return previous
+            }
+
+            return [...previous, event]
+          })
+
+          backendLastEventIdRef.current = Math.max(
+            backendLastEventIdRef.current,
+            event.id,
+          )
+        },
+
+        onError: (error) => {
+          setBackendError(error.message)
+        },
+      },
+    )
+  } catch (error) {
+    setBackendError(
+      error instanceof Error
+        ? error.message
+        : 'Could not connect to the backend.',
+    )
+  } finally {
+    setBackendLoading(false)
+  }
+}
   async function requestMicrophone() {
     if (!navigator.mediaDevices?.getUserMedia) {
       setMicStatus('Unsupported')
@@ -321,6 +389,46 @@ startMockStream(0)
         </div>
 
               <WorkflowProgress steps={workflowSteps} />
+              <section className="panel backend-events-panel">
+  <h2>Backend Event Stream</h2>
+
+  <p>
+    Real events received from the FastAPI mock backend.
+  </p>
+
+  <button
+    type="button"
+    onClick={startBackendSession}
+    disabled={backendLoading}
+  >
+    {backendLoading ? 'Connecting...' : 'Start Backend Mock Session'}
+  </button>
+
+  {backendSessionId && (
+    <p>
+      <strong>Session ID:</strong> {backendSessionId}
+    </p>
+  )}
+
+  {backendError && (
+    <p role="alert">{backendError}</p>
+  )}
+
+  {backendEvents.length === 0 ? (
+    <p>No backend events received yet.</p>
+  ) : (
+    <ol>
+      {backendEvents.map((event) => (
+        <li key={event.id}>
+          <strong>{event.event_type}</strong>
+          {' — '}
+          Event ID: {event.id}
+          <pre>{JSON.stringify(event.data, null, 2)}</pre>
+        </li>
+      ))}
+    </ol>
+  )}
+</section>
               <section className="approval-section">
   <button
     type="button"
@@ -346,6 +454,8 @@ startMockStream(0)
         <ContextPanel
   screenContextEnabled={screenContextEnabled}
   setScreenContextEnabled={setScreenContextEnabled}
+  microphoneCaptureEnabled={microphoneCaptureEnabled}
+  setMicrophoneCaptureEnabled={setMicrophoneCaptureEnabled}
 />
 
         <section className="accessibility-panel">

@@ -67,6 +67,7 @@ describe('Session Studio', () => {
   })
 
   it('completes the workflow and rejects approval without execution', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
     vi.useFakeTimers()
     render(<App />)
 
@@ -108,5 +109,7 @@ describe('Session Studio', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('FAILED')).toBeInTheDocument()
+    expect(fetchSpy).not.toHaveBeenCalled()
+fetchSpy.mockRestore()
   })
 })
