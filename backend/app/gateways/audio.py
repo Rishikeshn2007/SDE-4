@@ -1,13 +1,16 @@
-from datetime import datetime, timezone
+from app.mock_modules import MockAudioModule
 
 
 class AudioGateway:
+
+    def __init__(self):
+        self.module = MockAudioModule()
+
+    def health(self):
+        return self.module.health()
+
     def process(self, session_id: str, correlation_id: str):
-        return {
-            "module": "audio",
-            "session_id": session_id,
-            "correlation_id": correlation_id,
-            "status": "success",
-            "mode": "mock",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+        return self.module.process(
+            session_id,
+            correlation_id,
+        )

@@ -172,9 +172,22 @@ async def root():
 # Health endpoint
 @app.get("/health")
 async def health():
+    modules = {
+        "audio": audio_gateway.health(),
+        "transcription": transcription_gateway.health(),
+        "reasoning": reasoning_gateway.health(),
+        "workflow": workflow_gateway.health(),
+    }
 
-    return {"status": "healthy"}
+    all_healthy = all(
+        module["status"] == "healthy"
+        for module in modules.values()
+    )
 
+    return {
+        "status": "healthy" if all_healthy else "degraded",
+        "modules": modules,
+    }
 
 # Readiness endpoint
 @app.get("/ready")
@@ -365,7 +378,6 @@ async def process_session(
     session_id: str,
     request: Request,
 ):
-
     session = repository.get(session_id)
 
     if session is None:
@@ -382,30 +394,56 @@ async def process_session(
         "unknown",
     )
 
-    results = []
+    # Step 1: Audio
+    audio_result = audio_gateway.process(
+        session_id,
+        correlation_id,
+    )
 
-    gateways = [
-        audio_gateway,
-        transcription_gateway,
-        reasoning_gateway,
-        workflow_gateway,
+    # Step 2: Transcription
+    transcription_result = transcription_gateway.process(
+        session_id,
+        correlation_id,
+        audio_result,
+    )
+
+    # Step 3: Reasoning
+    reasoning_result = reasoning_gateway.process(
+        session_id,
+        correlation_id,
+        transcription_result,
+    )
+
+    # Step 4: Workflow
+    workflow_result = workflow_gateway.process(
+        session_id,
+        correlation_id,
+        reasoning_result,
+    )
+
+    results = [
+        audio_result,
+        transcription_result,
+        reasoning_result,
+        workflow_result,
     ]
 
-    for gateway in gateways:
-        result = gateway.process(session_id, correlation_id)
-        results.append(result)
-
+    for result in results:
         add_event(
             session_id,
             "gateway_processed",
             result,
         )
 
-    logger.info("All gateways processed session: %s", session_id)
+    logger.info(
+        "Complete mock pipeline processed session: %s",
+        session_id,
+    )
 
     return {
         "session_id": session_id,
         "correlation_id": correlation_id,
         "status": "success",
+        "mode": "mock",
         "modules": results,
     }
