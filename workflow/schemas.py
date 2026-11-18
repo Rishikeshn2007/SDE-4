@@ -41,7 +41,6 @@ class WorkflowPlan:
     plan_id: str
     steps: list[WorkflowStep]
 
-
 @dataclass
 class ApprovalRequest:
     plan_id: str
@@ -49,7 +48,7 @@ class ApprovalRequest:
     description: str
     approved: bool = False
     expires_at: float | None = None
-
+    approval_id: str = ""
 
 @dataclass
 class WorkflowResult:

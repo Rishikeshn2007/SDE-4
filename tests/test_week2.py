@@ -1,4 +1,5 @@
-﻿import threading
+﻿
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -108,14 +109,11 @@ class TestWeek2Policies(unittest.TestCase):
             ],
         )
 
-        with patch(
-            "workflow.executor.MOCK_TOOLS"
-        ) as tools:
+        with patch("workflow.executor.MOCK_TOOLS") as tools:
             result = execute_plan(
                 plan,
                 approvals={"s1": False},
             )
-
             tools["mock_note_preview"].assert_not_called()
 
         self.assertEqual(result.state, WorkflowState.FAILED)
@@ -136,9 +134,7 @@ class TestWeek2Policies(unittest.TestCase):
             ],
         )
 
-        with patch(
-            "workflow.executor.MOCK_TOOLS"
-        ) as tools:
+        with patch("workflow.executor.MOCK_TOOLS") as tools:
             result = execute_plan(
                 plan,
                 approvals={
@@ -148,7 +144,6 @@ class TestWeek2Policies(unittest.TestCase):
                     }
                 },
             )
-
             tools["mock_note_preview"].assert_not_called()
 
         self.assertEqual(result.state, WorkflowState.FAILED)
@@ -156,6 +151,68 @@ class TestWeek2Policies(unittest.TestCase):
             result.audit_events[-1]["event"],
             "approval_expired",
         )
+
+    def test_duplicate_approval_does_not_execute_tool(self):
+        plan = WorkflowPlan(
+            "duplicate-approval",
+            [
+                WorkflowStep(
+                    "s1",
+                    "mock_note_preview",
+                    {"title": "Test", "content": "Duplicate"},
+                    consequential=True,
+                )
+            ],
+        )
+
+        approvals = [
+            {
+                "plan_id": "duplicate-approval",
+                "step_id": "s1",
+                "approved": True,
+                "approval_id": "test-approval-id",
+            },
+            {
+                "plan_id": "duplicate-approval",
+                "step_id": "s1",
+                "approved": True,
+                "approval_id": "test-approval-id",
+            },
+        ]
+
+        with patch("workflow.executor.MOCK_TOOLS") as tools:
+            result = execute_plan(plan, approvals=approvals)
+            tools["mock_note_preview"].assert_not_called()
+
+        self.assertEqual(result.state, WorkflowState.FAILED)
+        self.assertIn("Duplicate approval", result.error)
+
+    def test_incorrect_approval_id_does_not_execute_tool(self):
+        plan = WorkflowPlan(
+            "incorrect-approval",
+            [
+                WorkflowStep(
+                    "s1",
+                    "mock_note_preview",
+                    {"title": "Test", "content": "Invalid ID"},
+                    consequential=True,
+                )
+            ],
+        )
+
+        approvals = {
+            "s1": {
+                "approved": True,
+                "approval_id": "wrong-approval-id",
+            }
+        }
+
+        with patch("workflow.executor.MOCK_TOOLS") as tools:
+            result = execute_plan(plan, approvals=approvals)
+            tools["mock_note_preview"].assert_not_called()
+
+        self.assertEqual(result.state, WorkflowState.FAILED)
+        self.assertIn("Invalid approval ID", result.error)
 
     def test_timeout_is_recorded(self):
         plan = WorkflowPlan(
@@ -232,14 +289,11 @@ class TestWeek2Policies(unittest.TestCase):
         cancel_event = threading.Event()
         cancel_event.set()
 
-        with patch(
-            "workflow.executor.MOCK_TOOLS"
-        ) as tools:
+        with patch("workflow.executor.MOCK_TOOLS") as tools:
             result = execute_plan(
                 plan,
                 cancel_event=cancel_event,
             )
-
             tools["mock_calculator"].assert_not_called()
 
         self.assertEqual(result.state, WorkflowState.CANCELLED)
