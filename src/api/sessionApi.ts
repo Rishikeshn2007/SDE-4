@@ -163,6 +163,7 @@ type BackendStreamOptions = {
   onError?: (error: Error) => void
 }
 
+
 export function subscribeToBackendEvents(
   sessionId: string,
   {
@@ -172,16 +173,32 @@ export function subscribeToBackendEvents(
     onError,
   }: BackendStreamOptions,
 ) {
-  const controller = new AbortController()
+  let lastEventId = afterEventId
   let closed = false
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  let activeController: AbortController | undefined
+
+  function scheduleReconnect() {
+    if (closed || reconnectTimer) return
+
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = undefined
+      void connect()
+    }, 1000)
+  }
 
   async function connect() {
+    if (closed) return
+
+    const controller = new AbortController()
+    activeController = controller
+
     try {
       const response = await fetch(
         `/api/sessions/${encodeURIComponent(sessionId)}/events`,
         {
           headers: {
-            'Last-Event-ID': String(afterEventId),
+            'Last-Event-ID': String(lastEventId),
             Accept: 'text/event-stream',
           },
           signal: controller.signal,
@@ -205,36 +222,65 @@ export function subscribeToBackendEvents(
 
         buffer += decoder.decode(value, { stream: true })
 
-        const frames = buffer.split('\n\n')
+        const frames = buffer.split(/\r?\n\r?\n/)
         buffer = frames.pop() ?? ''
 
         for (const frame of frames) {
-          const dataLine = frame
-            .split('\n')
-            .find((line) => line.startsWith('data:'))
+          const lines = frame.split(/\r?\n/)
 
-          if (!dataLine) continue
+          const idLine = lines.find((line) =>
+            line.startsWith('id:'),
+          )
 
-          const json = dataLine.slice(5).trim()
+          const dataLines = lines.filter((line) =>
+            line.startsWith('data:'),
+          )
+
+          if (dataLines.length === 0) continue
+
+          const eventId = idLine
+            ? Number(idLine.slice(3).trim())
+            : undefined
+
+          const json = dataLines
+            .map((line) => line.slice(5).trim())
+            .join('\n')
 
           try {
             const event = JSON.parse(json) as BackendEvent
-            onEvent(event)
+            const previousEventId = lastEventId
+
+            if (Number.isFinite(eventId) && eventId! > lastEventId) {
+              lastEventId = eventId!
+            } else if (event.id > lastEventId) {
+              lastEventId = event.id
+            }
+
+            if (event.id > previousEventId) {
+              onEvent(event)
+            }
           } catch {
             onError?.(new Error('Invalid event data received'))
           }
         }
       }
 
-      onStatusChange?.('closed')
+      if (!closed) {
+        scheduleReconnect()
+      }
     } catch (error) {
       if (!closed) {
-        onStatusChange?.('closed')
         onError?.(
           error instanceof Error
             ? error
             : new Error('Unable to connect to event stream'),
         )
+
+        scheduleReconnect()
+      }
+    } finally {
+      if (activeController === controller) {
+        activeController = undefined
       }
     }
   }
@@ -244,9 +290,14 @@ export function subscribeToBackendEvents(
   return {
     close() {
       closed = true
-      controller.abort()
+
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = undefined
+      }
+
+      activeController?.abort()
       onStatusChange?.('closed')
     },
   }
 }
-
