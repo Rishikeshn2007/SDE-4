@@ -1,25 +1,10 @@
-﻿# W4 Agentic Workflow
+﻿# SDE-4 - Workflow Automation System
 
 ## Project Overview
 
-A Python-based agentic workflow demonstrating safe planning, validation, approval, execution, checkpoint recovery, and audit tracking using mock tools.
+This project implements a workflow automation engine with checkpointing, recovery, approval handling, audit logging, and audio/transcription support.
 
-## Week 2 Features
-
-- Workflow plan and step definitions
-- Workflow state management
-- Dependency validation and cycle detection
-- Allow-listed tool registry
-- Required and unexpected argument validation
-- Permission scope validation
-- Human approval for consequential steps
-- Rejected and expired approval handling
-- Per-step timeouts
-- Bounded retries for idempotent tools
-- Cancellation before the next step
-- Mock-only execution
-
-## Week 3 Features
+## Workflow Engine Features
 
 - Workflow checkpoint creation and storage
 - Resume execution from saved checkpoints
@@ -34,15 +19,69 @@ A Python-based agentic workflow demonstrating safe planning, validation, approva
 - Expired approval handling
 - Plan signature validation
 
-## Technologies
+## Audio and Speech-to-Text Integration
 
-- Python
-- Pytest
-- ThreadPoolExecutor
-- unittest
-- JSON-based checkpoint and audit storage
+### Audio package (`academia_audio/`)
+
+- Audio buffer management
+- Audio chunking
+- Mock audio source
+- Audio device handling
+- Voice activity detection
+- Audio session lifecycle management
+- Audio schemas and CLI support
+
+### Speech-to-Text package (`src/sde4_stt/`)
+
+- Transcript accumulation
+- Duplicate transcript detection
+- Transcript preprocessing
+- Transcription orchestration
+- Retry handling
+- Fake and real transcriber adapters
+- Transcript schemas
+
+## Dependencies
+
+Core dependencies:
+
+```powershell
+py -m pip install -r requirements.txt
+```
+
+Optional real speech recognition dependency:
+
+```powershell
+py -m pip install -r requirements-optional.txt
+```
+
+The real speech recognition adapter may require an internet connection. Mock-mode tests do not require a real microphone.
+
+## Run Tests
+
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+py -m pytest tests -v
+```
 
 ## Run Demo
 
 ```powershell
 py demo.py
+```
+
+## Technologies
+
+- Python
+- Pydantic
+- Pytest
+- unittest
+- SpeechRecognition (optional)
+- JSON-based checkpoint and audit storage
+- ThreadPoolExecutor
+
+## Current Integration Status
+
+The workflow engine, audio package, and speech-to-text package have been added to the repository and their unit tests have been verified.
+
+Full frontend-to-backend audio upload, live transcription, approval API integration, and end-to-end testing remain separate integration tasks.
