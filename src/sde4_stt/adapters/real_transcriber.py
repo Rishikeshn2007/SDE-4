@@ -113,6 +113,16 @@ class RealSpeechTranscriber(BaseTranscriberAdapter):
         self._sample_rate = sample_rate
         self._sample_width = sample_width
         self._recognizer = sr.Recognizer()
+
+        # Bound the HTTP socket timeout for the recognize_google() call.
+        # The SpeechRecognition default is None (no timeout), which means the
+        # underlying urllib.request.urlopen() socket can block indefinitely on
+        # large payloads or slow networks—easily exceeding the RetryableAdapter's
+        # 30-second cumulative deadline and exhausting all retry budget on the
+        # very first attempt.  15 seconds is generous for a 20-second recording
+        # over a typical broadband connection while still providing a predictable
+        # upper bound.  Callers can override this via start_session().
+        self._recognizer.operation_timeout = 15
         self._audio_buffer = bytearray()
         self._start_time = 0.0
         self._chunk_count = 0
@@ -203,10 +213,7 @@ class RealSpeechTranscriber(BaseTranscriberAdapter):
             or ``bytes``-like object.
         """
         if not self._is_active or self._session_id is None:
-            raise RuntimeError(
-                "Cannot process chunks without an active session. "
-                "Call start_session() first."
-            )
+            raise RuntimeError("Cannot process chunks without an active session. Call start_session() first.")
 
         if isinstance(chunk, AudioChunk):
             data = chunk.data
@@ -220,6 +227,40 @@ class RealSpeechTranscriber(BaseTranscriberAdapter):
         self._audio_buffer.extend(data)
         self._chunk_count += 1
         return []
+
+    def cancel(self) -> List[TranscriptEvent]:
+        """
+        Cancel the active session immediately, discard buffered audio, and emit CANCELLED.
+
+        Notes on Cancellation Semantics:
+        --------------------------------
+        1. Buffered audio is immediately cleared from memory.
+        2. `self._is_active` is set to False; subsequent `process_chunk()` calls will raise RuntimeError.
+        3. Subsequent `finish_session()` calls will raise RuntimeError, ensuring no FINAL event
+           can be emitted after cancellation.
+        4. In-flight synchronous network I/O (`recognize_google` HTTP call inside `finish_session`)
+           blocks on Python standard library socket operations and cannot be asynchronously interrupted
+           from another thread without tearing down the worker thread/process. However, calling `cancel()`
+           before `finish_session()` guarantees no network request is ever initiated.
+
+        Returns
+        -------
+        List[TranscriptEvent]
+            A single :attr:`TranscriptEventType.CANCELLED` event, or empty list if no active session.
+        """
+        if not self._is_active or self._session_id is None:
+            return []
+
+        self._audio_buffer.clear()
+        self._is_active = False
+        return [
+            TranscriptEvent(
+                event_id=f"evt_{self._session_id}_cancelled",
+                session_id=self._session_id,
+                event_type=TranscriptEventType.CANCELLED,
+                timestamp=time.time(),
+            )
+        ]
 
     def finish_session(self) -> List[TranscriptEvent]:
         """
@@ -366,5 +407,6 @@ class RealSpeechTranscriber(BaseTranscriberAdapter):
             )
         )
 
+        self._audio_buffer.clear()
         self._is_active = False
         return events

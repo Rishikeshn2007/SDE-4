@@ -277,8 +277,15 @@ class AudioPreprocessor:
         sum_sq = sum((s / max_val) ** 2 for s in samples)
         rms = math.sqrt(sum_sq / num_samples)
 
-        # Silence threshold: avoid amplifying noise floor
-        if rms < 1e-6:
+        # Silence / near-silence guard: skip normalization for signals below the
+        # indoor noise-floor threshold.  The original threshold of 1e-6 only
+        # protected against pure digital silence (all-zero samples).  In practice,
+        # any background noise above ~1 raw PCM unit was amplified per-chunk to the
+        # target RMS, pumping up the noise floor during pauses and introducing
+        # audible hiss.  0.005 (≈ 164 raw PCM amplitude on a 32768 scale) covers
+        # typical indoor ambient noise so silent / near-silent chunks are left
+        # unchanged rather than being amplified by 50-100×.
+        if rms < 0.005:
             return pcm_data
 
         gain = self.target_rms / rms

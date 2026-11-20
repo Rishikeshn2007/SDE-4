@@ -104,12 +104,32 @@ class TestNormalize:
 
     def test_rms_moves_toward_target(self):
         pre = AudioPreprocessor(target_rms=0.1, normalize_audio=True)
-        # Create a quiet signal
-        quiet = [50] * 100
+        # Signal with amplitude 300 → normalized RMS ≈ 300/32768 ≈ 0.00916,
+        # which is above the near-silence skip threshold (0.005) so normalization
+        # is applied and the output RMS should be larger than the input RMS.
+        quiet = [300] * 100
         data = _make_pcm_bytes(quiet)
         out = pre.normalize(data)
         out_samples = _unpack_pcm(out)
         assert _rms(out_samples) > _rms(quiet)  # should be louder
+
+    def test_near_silence_not_amplified(self):
+        """Chunks below the 0.005 normalized-RMS threshold are returned unchanged.
+
+        This prevents the normalization stage from pumping up background noise
+        during pauses (noise-floor amplification), which degrades Google STT
+        recognition quality by distorting the speech/silence contrast.
+        """
+        pre = AudioPreprocessor(target_rms=0.1, normalize_audio=True)
+        # Amplitude 50 → normalized RMS ≈ 50/32768 ≈ 0.00153, below the 0.005
+        # threshold → normalize() must return the original bytes unchanged.
+        near_silence = [50] * 100
+        data = _make_pcm_bytes(near_silence)
+        out = pre.normalize(data)
+        assert out == data, (
+            "Chunks below the 0.005 near-silence threshold must NOT be amplified; "
+            "got modified output when input RMS < 0.005"
+        )
 
     def test_loud_signal_attenuated(self):
         pre = AudioPreprocessor(target_rms=0.01, normalize_audio=True)
@@ -160,7 +180,9 @@ class TestProcessChunk:
             target_rms=0.1,
             normalize_audio=True,
         )
-        quiet = [10] * 100
+        # Amplitude 300 → normalized RMS ≈ 300/32768 ≈ 0.00916, which is above
+        # the near-silence skip threshold (0.005), so normalization is applied.
+        quiet = [300] * 100
         chunk = _make_chunk(quiet, sample_rate=16000)
         out = pre.process_chunk(chunk)
         out_samples = _unpack_pcm(out.data)

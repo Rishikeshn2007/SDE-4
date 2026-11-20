@@ -100,6 +100,9 @@ class NormalizedError(Exception):
     PROVIDER_ERROR: str = "PROVIDER_ERROR"
     INVALID_INPUT: str = "INVALID_INPUT"
     UNKNOWN_ERROR: str = "UNKNOWN_ERROR"
+    QUOTA_EXHAUSTED: str = "QUOTA_EXHAUSTED"
+    RATE_LIMITED: str = "RATE_LIMITED"
+    NETWORK_ERROR: str = "NETWORK_ERROR"
 
     def __init__(
         self,
@@ -329,6 +332,8 @@ class RetryableAdapter(BaseTranscriberAdapter):
 
     def _normalize_error(self, exc: Exception) -> NormalizedError:
         """Map a raw exception to a ``NormalizedError`` with a canonical code."""
+        if isinstance(exc, NormalizedError):
+            return exc
         if isinstance(exc, TimeoutError):
             return NormalizedError(
                 code=NormalizedError.TIMEOUT,
@@ -340,6 +345,13 @@ class RetryableAdapter(BaseTranscriberAdapter):
             return NormalizedError(
                 code=NormalizedError.PROVIDER_ERROR,
                 message=f"Connection error: {exc}",
+                recoverable=True,
+                original=exc,
+            )
+        if isinstance(exc, PermissionError):
+            return NormalizedError(
+                code=NormalizedError.QUOTA_EXHAUSTED,
+                message=f"Quota exhausted / permission denied: {exc}",
                 recoverable=True,
                 original=exc,
             )

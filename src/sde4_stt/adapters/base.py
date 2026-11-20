@@ -93,6 +93,19 @@ class BaseTranscriberAdapter(ABC):
         """
         pass
 
+    def cancel(self) -> List[TranscriptEvent]:
+        """
+        Cancels the currently active transcription session immediately.
+
+        Default implementation is a no-op returning an empty list.
+        Subclasses should override this to stop in-flight operations and emit
+        a CANCELLED event, then mark the session as inactive.
+
+        Returns:
+            List containing a CANCELLED event (or empty list if no session is active).
+        """
+        return []
+
     def transcribe_stream(
         self,
         chunks: Iterable[Union[AudioChunk, bytes]],

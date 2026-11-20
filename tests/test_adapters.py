@@ -388,3 +388,54 @@ class TestRealSpeechTranscriberIntegration:
         # Session should still be active (finish_session not called)
         assert adapter.is_active
 
+    def test_cancel_discards_buffer_and_emits_cancelled(self, mock_sr):
+        """RealSpeechTranscriber.cancel() must clear audio buffer, mark session inactive, and emit CANCELLED."""
+        from sde4_stt.adapters.real_transcriber import RealSpeechTranscriber
+
+        adapter = RealSpeechTranscriber()
+        adapter.start_session("sess_cancel_real")
+        chunk = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x00\x00" * 800)
+        adapter.process_chunk(chunk)
+        assert len(adapter._audio_buffer) == 1600
+        assert adapter.is_active
+
+        events = adapter.cancel()
+        assert len(events) == 1
+        assert events[0].event_type == TranscriptEventType.CANCELLED
+        assert events[0].session_id == "sess_cancel_real"
+        assert len(adapter._audio_buffer) == 0
+        assert not adapter.is_active
+
+        # Repeated cancellation is a safe no-op
+        assert adapter.cancel() == []
+
+        # Chunks cannot be processed after cancellation
+        with pytest.raises(RuntimeError, match="Cannot process chunks without an active session"):
+            adapter.process_chunk(chunk)
+
+        # No FINAL event can be emitted after cancellation
+        with pytest.raises(RuntimeError, match="Session is not active"):
+            adapter.finish_session()
+
+    def test_cancel_after_finalization(self, mock_sr, monkeypatch):
+        """Calling cancel after finish_session() is a safe no-op."""
+        from sde4_stt.adapters.real_transcriber import RealSpeechTranscriber
+
+        adapter = RealSpeechTranscriber()
+        monkeypatch.setattr(
+            adapter._recognizer,
+            "recognize_google",
+            lambda audio_data, language="en-US": "sample recognized text",
+        )
+        adapter.start_session("sess_cancel_after_fin")
+        chunk = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x00\x00" * 800)
+        adapter.process_chunk(chunk)
+        finish_events = adapter.finish_session()
+        assert any(e.event_type == TranscriptEventType.FINAL for e in finish_events)
+        assert not adapter.is_active
+
+        # Cancel on already finished session returns []
+        cancel_events = adapter.cancel()
+        assert cancel_events == []
+        assert len(adapter._audio_buffer) == 0
+

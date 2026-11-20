@@ -28,8 +28,10 @@ class TranscriptEventType(str, Enum):
     """
     START = "START"
     INTERIM = "INTERIM"
+    REVISED = "REVISED"
     FINAL = "FINAL"
     COMPLETE = "COMPLETE"
+    CANCELLED = "CANCELLED"
     ERROR = "ERROR"
 
 
@@ -210,8 +212,12 @@ class TranscriptEvent(BaseModel):
     Streamable event emitted during real-time speech transcription.
 
     Lifecycle:
-        START -> (INTERIM)* -> FINAL -> (INTERIM)* -> FINAL ... -> COMPLETE
-        (Or ERROR emitted at any point upon failure)
+        START -> (INTERIM | REVISED)* -> FINAL -> (INTERIM | REVISED)* -> FINAL ... -> COMPLETE
+        (Or CANCELLED emitted when session is cancelled; ERROR at any point upon failure)
+
+        REVISED events are non-final revisions that differ from INTERIM in that they
+        explicitly signal a correction of a previously emitted interim result.
+        A REVISED event CANNOT supersede a FINAL for the same sequence number.
 
     Attributes:
         event_id: Unique identifier for this event instance.
@@ -251,8 +257,12 @@ class TranscriptEvent(BaseModel):
             if self.error is None:
                 raise ValueError("TranscriptEvent of type ERROR must have an 'error' payload.")
 
-        # If event_type is INTERIM or FINAL, segment field MUST be provided
-        if self.event_type in (TranscriptEventType.INTERIM, TranscriptEventType.FINAL):
+        # If event_type is INTERIM, REVISED or FINAL, segment field MUST be provided
+        if self.event_type in (
+            TranscriptEventType.INTERIM,
+            TranscriptEventType.REVISED,
+            TranscriptEventType.FINAL,
+        ):
             if self.segment is None:
                 raise ValueError(
                     f"TranscriptEvent of type {self.event_type.value} must include a 'segment' payload."
@@ -261,11 +271,20 @@ class TranscriptEvent(BaseModel):
             # Ensure consistency between event_type and segment.is_final
             if self.event_type == TranscriptEventType.FINAL and not self.segment.is_final:
                 raise ValueError("A FINAL TranscriptEvent must carry a segment with is_final=True.")
-            if self.event_type == TranscriptEventType.INTERIM and self.segment.is_final:
-                raise ValueError("An INTERIM TranscriptEvent must carry a segment with is_final=False.")
+            if self.event_type in (
+                TranscriptEventType.INTERIM,
+                TranscriptEventType.REVISED,
+            ) and self.segment.is_final:
+                raise ValueError(
+                    f"A {self.event_type.value} TranscriptEvent must carry a segment with is_final=False."
+                )
 
-        # For START and COMPLETE events, error must not be populated
-        if self.event_type in (TranscriptEventType.START, TranscriptEventType.COMPLETE):
+        # For START, COMPLETE, and CANCELLED events, error must not be populated
+        if self.event_type in (
+            TranscriptEventType.START,
+            TranscriptEventType.COMPLETE,
+            TranscriptEventType.CANCELLED,
+        ):
             if self.error is not None:
                 raise ValueError(
                     f"TranscriptEvent of type {self.event_type.value} cannot contain an error payload."
