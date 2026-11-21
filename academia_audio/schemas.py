@@ -52,6 +52,10 @@ class AudioErrorCode(str, Enum):
     ILLEGAL_STATE_TRANSITION = "illegal_state_transition"
     BUFFER_OVERFLOW = "buffer_overflow"
     AUDIO_GAP_DETECTED = "audio_gap_detected"
+    DEVICE_LOST = "device_lost"
+    SESSION_CANCELLED = "session_cancelled"
+    INVALID_EVENT = "invalid_event"
+    RECONNECTION_FAILED = "reconnection_failed"
 
 
 class AudioError(Exception):
@@ -248,3 +252,239 @@ def assert_stream_order(chunks: Iterable[AudioChunk]) -> int:
         prev = chunk
         count += 1
     return count
+
+
+# --------------------------------------------------------------------------
+# Week 3: Speech & Audio Pipeline Events
+# --------------------------------------------------------------------------
+def _validate_id(name: str, value: object) -> str:
+    """Validate that session_id or correlation_id is a non-empty string."""
+    if not isinstance(value, str) or not value.strip():
+        raise AudioError(
+            AudioErrorCode.INVALID_PARAMETER,
+            f"{name} must be a non-empty string, got {value!r}",
+        )
+    return value.strip()
+
+
+class AudioEventType(str, Enum):
+    """Categorical type indicator for events emitted by the audio pipeline."""
+
+    SPEECH_START = "speech_start"
+    SPEECH_END = "speech_end"
+    AUDIO_CHUNK = "audio_chunk"
+    DEVICE_DISCONNECTED = "device_disconnected"
+    DEVICE_RECONNECTED = "device_reconnected"
+    SESSION_CANCELLED = "session_cancelled"
+
+
+@dataclass(frozen=True)
+class BaseAudioEvent:
+    """Base event contract for all events emitted by the audio pipeline.
+
+    Every event carries strict session and correlation tracking IDs.
+
+    Fields:
+        event_id:       Unique identifier for the event (e.g. 'evt_sess1_0').
+        session_id:     Identifier of the active interaction session.
+        correlation_id: Distributed tracing correlation identifier.
+        event_type:     :class:`AudioEventType` indicating the event category.
+        timestamp_s:    Timestamp in seconds relative to session start (>= 0.0).
+        sequence_id:    Monotonically increasing event sequence counter (>= 0).
+    """
+
+    event_id: str
+    session_id: str
+    correlation_id: str
+    event_type: AudioEventType
+    timestamp_s: float
+    sequence_id: int
+
+    def __post_init__(self) -> None:
+        _validate_id("event_id", self.event_id)
+        _validate_id("session_id", self.session_id)
+        _validate_id("correlation_id", self.correlation_id)
+        if not isinstance(self.event_type, AudioEventType):
+            raise AudioError(
+                AudioErrorCode.INVALID_PARAMETER,
+                f"event_type must be an AudioEventType, got {self.event_type!r}",
+            )
+        if (
+            isinstance(self.timestamp_s, bool)
+            or not isinstance(self.timestamp_s, (int, float))
+            or not math.isfinite(self.timestamp_s)
+            or self.timestamp_s < 0.0
+        ):
+            raise AudioError(
+                AudioErrorCode.INVALID_TIMESTAMP,
+                f"timestamp_s must be a finite float >= 0.0, got {self.timestamp_s!r}",
+            )
+        if not _is_int(self.sequence_id) or self.sequence_id < 0:
+            raise AudioError(
+                AudioErrorCode.INVALID_SEQUENCE_ID,
+                f"sequence_id must be an int >= 0, got {self.sequence_id!r}",
+            )
+
+
+@dataclass(frozen=True)
+class SpeechStartEvent(BaseAudioEvent):
+    """Emitted when Voice Activity Detection transitions from silence to speech.
+
+    Guaranteed to precede any speech-bearing audio chunks within an utterance.
+
+    Fields:
+        speech_start_time_s: Audio timestamp where speech onset was detected.
+    """
+
+    speech_start_time_s: float = 0.0
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if (
+            isinstance(self.speech_start_time_s, bool)
+            or not isinstance(self.speech_start_time_s, (int, float))
+            or not math.isfinite(self.speech_start_time_s)
+            or self.speech_start_time_s < 0.0
+        ):
+            raise AudioError(
+                AudioErrorCode.INVALID_TIMESTAMP,
+                f"speech_start_time_s must be a finite float >= 0.0, got {self.speech_start_time_s!r}",
+            )
+
+
+@dataclass(frozen=True)
+class SpeechEndEvent(BaseAudioEvent):
+    """Emitted when Voice Activity Detection transitions from speech back to silence.
+
+    Guaranteed to conclude an utterance following a preceding :class:`SpeechStartEvent`.
+
+    Fields:
+        speech_start_time_s: Audio timestamp where speech began.
+        speech_end_time_s:   Audio timestamp where speech concluded.
+        duration_s:          Total speech duration in seconds.
+    """
+
+    speech_start_time_s: float = 0.0
+    speech_end_time_s: float = 0.0
+    duration_s: float = 0.0
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if (
+            isinstance(self.speech_start_time_s, bool)
+            or not isinstance(self.speech_start_time_s, (int, float))
+            or not math.isfinite(self.speech_start_time_s)
+            or self.speech_start_time_s < 0.0
+        ):
+            raise AudioError(
+                AudioErrorCode.INVALID_TIMESTAMP,
+                f"speech_start_time_s must be a finite float >= 0.0, got {self.speech_start_time_s!r}",
+            )
+        if (
+            isinstance(self.speech_end_time_s, bool)
+            or not isinstance(self.speech_end_time_s, (int, float))
+            or not math.isfinite(self.speech_end_time_s)
+            or self.speech_end_time_s < self.speech_start_time_s
+        ):
+            raise AudioError(
+                AudioErrorCode.INVALID_TIMESTAMP,
+                f"speech_end_time_s must be >= speech_start_time_s, got {self.speech_end_time_s!r}",
+            )
+        if (
+            isinstance(self.duration_s, bool)
+            or not isinstance(self.duration_s, (int, float))
+            or not math.isfinite(self.duration_s)
+            or self.duration_s < 0.0
+        ):
+            raise AudioError(
+                AudioErrorCode.INVALID_PARAMETER,
+                f"duration_s must be a finite float >= 0.0, got {self.duration_s!r}",
+            )
+
+
+@dataclass(frozen=True)
+class AudioChunkEvent(BaseAudioEvent):
+    """Normalized audio payload emitted for every captured chunk in the pipeline.
+
+    Fields:
+        chunk:      The underlying normalized :class:`AudioChunk`.
+        is_speech:  True if VAD classified this chunk as active voice activity.
+        rms_energy: Normalized acoustic RMS power [0.0, 1.0].
+    """
+
+    chunk: AudioChunk = None  # type: ignore
+    is_speech: bool = False
+    rms_energy: float = 0.0
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.chunk, AudioChunk):
+            raise AudioError(
+                AudioErrorCode.INVALID_DATA_TYPE,
+                f"chunk must be an AudioChunk instance, got {type(self.chunk).__name__}",
+            )
+        if not isinstance(self.is_speech, bool):
+            raise AudioError(
+                AudioErrorCode.INVALID_PARAMETER,
+                f"is_speech must be a bool, got {type(self.is_speech).__name__}",
+            )
+        if (
+            isinstance(self.rms_energy, bool)
+            or not isinstance(self.rms_energy, (int, float))
+            or not (0.0 <= self.rms_energy <= 1.0)
+        ):
+            raise AudioError(
+                AudioErrorCode.INVALID_PARAMETER,
+                f"rms_energy must be in [0.0, 1.0], got {self.rms_energy!r}",
+            )
+
+
+@dataclass(frozen=True)
+class DeviceDisconnectedEvent(BaseAudioEvent):
+    """Emitted when an active audio input device disconnection is detected.
+
+    Fields:
+        device_id: ID of the disconnected device.
+        reason:    Descriptive reason or error message for disconnection.
+    """
+
+    device_id: str = ""
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _validate_id("device_id", self.device_id)
+
+
+@dataclass(frozen=True)
+class DeviceReconnectedEvent(BaseAudioEvent):
+    """Emitted when audio input device reconnection succeeds without crashing.
+
+    Fields:
+        device_id:          ID of the reconnected or newly selected device.
+        reconnect_attempts: Number of reconnection attempts made before success.
+    """
+
+    device_id: str = ""
+    reconnect_attempts: int = 1
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _validate_id("device_id", self.device_id)
+        if not _is_int(self.reconnect_attempts) or self.reconnect_attempts < 1:
+            raise AudioError(
+                AudioErrorCode.INVALID_PARAMETER,
+                f"reconnect_attempts must be an int >= 1, got {self.reconnect_attempts!r}",
+            )
+
+
+@dataclass(frozen=True)
+class SessionCancelledEvent(BaseAudioEvent):
+    """Emitted when an active capture session is cancelled by user or caller.
+
+    Fields:
+        reason: Explanation for session cancellation.
+    """
+
+    reason: str = ""
+

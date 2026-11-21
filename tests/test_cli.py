@@ -1,4 +1,4 @@
-﻿import json
+import json
 
 from academia_audio.cli import main
 
@@ -45,4 +45,13 @@ def test_cli_demo_flag(capsys):
     assert main(["--demo"]) == 0
     out = capsys.readouterr().out
     assert "ACADEMIA AI VOICE BOT - WEEK 2 PIPELINE DEMO" in out
+    assert "Buffer released: True" in out
+
+
+def test_cli_demo3_flag(capsys):
+    assert main(["--demo3"]) == 0
+    out = capsys.readouterr().out
+    assert "ACADEMIA AI VOICE BOT - WEEK 3 PIPELINE DEMO" in out
+    assert "SPEECH_START" in out
+    assert "SPEECH_END" in out
     assert "Buffer released: True" in out

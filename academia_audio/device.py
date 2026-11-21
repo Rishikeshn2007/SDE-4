@@ -127,6 +127,18 @@ class DeviceAdapter(ABC):
     def is_open(self) -> bool:
         """True if the audio stream is currently open."""
 
+    @property
+    def is_connected(self) -> bool:
+        """True if the audio device is physically connected and recognized by the system."""
+        return True
+
+    def disconnect(self, reason: str = "Device disconnected") -> None:
+        """Simulate or trigger hardware device disconnection."""
+
+    def reconnect(self, device_id: Optional[str] = None) -> bool:
+        """Attempt to re-establish connection to the device or switch to a fallback."""
+        return True
+
 
 class MockDeviceAdapter(DeviceAdapter):
     """Deterministic mock audio device adapter for tests and offline development.
@@ -160,6 +172,8 @@ class MockDeviceAdapter(DeviceAdapter):
         self._chunk_iterator: Optional[Iterator[AudioChunk]] = None
         self._is_open: bool = False
         self._active_format: Optional[AudioFormat] = None
+        self._is_connected: bool = True
+        self._disconnect_reason: str = ""
 
     def list_devices(self) -> List[DeviceInfo]:
         return list(self._devices.values())
@@ -227,7 +241,37 @@ class MockDeviceAdapter(DeviceAdapter):
 
         self._is_open = True
 
+    @property
+    def is_connected(self) -> bool:
+        return self._is_connected
+
+    def disconnect(self, reason: str = "Simulated device disconnection") -> None:
+        """Simulate hardware disconnect of the active audio input device."""
+        self._is_connected = False
+        self._disconnect_reason = reason
+
+    def simulate_disconnect(self, reason: str = "Simulated device disconnection") -> None:
+        """Alias for :meth:`disconnect`."""
+        self.disconnect(reason)
+
+    def reconnect(self, device_id: Optional[str] = None) -> bool:
+        """Simulate physical reconnection and restore device stream."""
+        if device_id is not None:
+            self.select_device(device_id)
+        self._is_connected = True
+        self._disconnect_reason = ""
+        self._is_open = True
+        if self._chunk_iterator is None and self._active_format is not None:
+            self.open(self._active_format)
+        return True
+
     def read_chunk(self) -> Optional[AudioChunk]:
+        if not self._is_connected:
+            raise AudioError(
+                AudioErrorCode.DEVICE_LOST,
+                f"Audio device '{self._selected_device.id}' disconnected: "
+                f"{self._disconnect_reason or 'Device unplugged'}",
+            )
         if not self._is_open:
             return None
         if self._permission_state == PermissionState.DENIED:
