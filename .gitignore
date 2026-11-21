@@ -2,10 +2,36 @@
 __pycache__/
 *.py[cod]
 
-# Virtual environments
+# Python virtual environments
 venv/
 .venv/
 
 # Test and coverage files
 .coverage
 htmlcov/
+.pytest_cache/
+
+# Node dependencies
+node_modules/
+
+# Production build
+dist/
+
+# Downloaded Vosk models
+models/
+
+# Environment and secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# Backup files
+*.backup
+*.bak
+src/App.backup.tsx
+
+# Operating system files
+.DS_Store
+Thumbs.db
