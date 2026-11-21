@@ -34,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="print one JSON object per chunk")
     p.add_argument("--vad", action="store_true", help="evaluate and display VAD speech detection")
     p.add_argument("--demo", action="store_true", help="run a short demonstration of the Week 2 pipeline")
+    p.add_argument("--demo3", action="store_true", help="run a demonstration of Week 3 speech events, device recovery, and transcription")
     return p
 
 
@@ -104,10 +105,74 @@ def run_week2_demo() -> int:
     return 0
 
 
+def run_week3_demo() -> int:
+    """Demonstrate Week 3: speech events, device-loss recovery, cancellation, and transcription."""
+    from .transcription import MockTranscriptionAdapter, TranscriptionBridge
+
+    print("=" * 70)
+    print("  ACADEMIA AI VOICE BOT - WEEK 3 PIPELINE DEMO")
+    print("  Speech Events, Device-Loss Recovery & Transcription Integration")
+    print("=" * 70)
+
+    # 1. Setup with TranscriptionBridge
+    mic = MockMicrophone(segment_s=0.06)
+    adapter = MockDeviceAdapter(mock_source=mic)
+    vad = MockVAD(energy_threshold=0.05, min_speech_duration_ms=40.0)
+    pipeline = AudioPipeline(adapter=adapter, vad=vad, auto_reconnect=True)
+    bridge = TranscriptionBridge(
+        transcriber=MockTranscriptionAdapter(canned_transcript="academia speech pipeline active"),
+    )
+    pipeline.attach_transcription_sink(bridge)
+
+    print("\n1. Pipeline & Session Initialized:")
+    pipeline.start(session_id="sess_cli_w3", correlation_id="corr_cli_w3")
+    print(f"   session_id:     {pipeline.session_id}")
+    print(f"   correlation_id: {pipeline.correlation_id}")
+    print(f"   state:          {pipeline.state.value}")
+
+    # 2. Run steps and capture speech events
+    print("\n2. Processing Audio Stream & Emitting Speech Events:")
+    for _ in range(8):
+        pipeline.step()
+
+    speech_events = [e for e in pipeline.events if e.event_type.value in ("speech_start", "speech_end")]
+    print(f"   Total pipeline events emitted: {len(pipeline.events)}")
+    print(f"   Speech state events:           {len(speech_events)}")
+    for se in speech_events:
+        print(f"   -> [{se.event_type.value.upper()}] seq={se.sequence_id} ts={se.timestamp_s:.3f}s")
+
+    # 3. Simulate Device Loss and Auto-Recovery
+    print("\n3. Simulating Device Loss Mid-Session:")
+    adapter.simulate_disconnect(reason="Microphone USB cable removed")
+    print("   adapter.simulate_disconnect() triggered")
+    pipeline.step()
+    print(f"   Pipeline auto-recovered state: {pipeline.state.value}")
+    print(f"   Disconnections detected:       {pipeline.device_disconnections_detected}")
+    print(f"   Reconnections successful:      {pipeline.device_reconnections_successful}")
+
+    # 4. Transcription Result
+    print("\n4. End-to-End Transcription Integration:")
+    print(f"   Speech chunks forwarded: {bridge.total_speech_chunks_forwarded}")
+    print(f"   Recognized text:         '{bridge.get_transcript_text()}'")
+
+    # 5. Cancellation & Buffer Cleanup
+    print("\n5. Session Cancellation & Resource Cleanup:")
+    pipeline.cancel(reason="Demo completed")
+    print(f"   pipeline.cancel() -> state: {pipeline.state.value}")
+    print(f"   Buffer size after cancel:  {pipeline.buffer.size} (Buffer released: {pipeline.buffer.is_empty})")
+
+    print("\n" + "=" * 70)
+    print("  DEMO COMPLETE - ALL WEEK 3 REQUIREMENTS OPERATIONAL")
+    print("=" * 70)
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     if args.demo:
         return run_week2_demo()
+    if args.demo3:
+        return run_week3_demo()
 
     try:
         fmt = AudioFormat(sample_rate=args.sample_rate, channels=args.channels)

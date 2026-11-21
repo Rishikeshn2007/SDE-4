@@ -1,4 +1,4 @@
-"""Academia AI Voice Bot - Audio & VAD (Week 1 & Week 2 Foundation)."""
+"""Academia AI Voice Bot - Audio & VAD (Weeks 1, 2, and 3 Foundation)."""
 
 from .buffer import BoundedAudioBuffer, OverflowStrategy
 from .chunker import chunk_pcm, frames_per_chunk
@@ -11,17 +11,39 @@ from .device import (
 )
 from .lifecycle import AudioPipeline, LifecycleState
 from .mock_source import MockMicrophone
+from .normalization import (
+    compute_peak_amplitude,
+    normalize_audio_chunk,
+    normalize_pcm_bytes,
+)
 from .schemas import (
     ENCODING,
     SAMPLE_WIDTH_BYTES,
     SUPPORTED_CHANNELS,
     SUPPORTED_SAMPLE_RATES,
     AudioChunk,
+    AudioChunkEvent,
     AudioError,
     AudioErrorCode,
+    AudioEventType,
     AudioFormat,
+    BaseAudioEvent,
+    DeviceDisconnectedEvent,
+    DeviceReconnectedEvent,
+    SessionCancelledEvent,
+    SpeechEndEvent,
+    SpeechStartEvent,
+    _validate_id,
     assert_stream_order,
     crc32,
+)
+from .transcription import (
+    MockTranscriptEvent,
+    MockTranscriptEventType,
+    MockTranscriptSegment,
+    MockTranscriptionAdapter,
+    MockWordTiming,
+    TranscriptionBridge,
 )
 from .vad import BaseVAD, MockVAD, VADResult, compute_rms
 
@@ -58,4 +80,25 @@ __all__ = [
     # Lifecycle & Pipeline (W2)
     "AudioPipeline",
     "LifecycleState",
+    # Speech Events & Schemas (W3)
+    "AudioEventType",
+    "BaseAudioEvent",
+    "SpeechStartEvent",
+    "SpeechEndEvent",
+    "AudioChunkEvent",
+    "DeviceDisconnectedEvent",
+    "DeviceReconnectedEvent",
+    "SessionCancelledEvent",
+    "_validate_id",
+    # Normalization (W3)
+    "compute_peak_amplitude",
+    "normalize_pcm_bytes",
+    "normalize_audio_chunk",
+    # Transcription Integration (W3)
+    "MockTranscriptEventType",
+    "MockWordTiming",
+    "MockTranscriptSegment",
+    "MockTranscriptEvent",
+    "MockTranscriptionAdapter",
+    "TranscriptionBridge",
 ]
