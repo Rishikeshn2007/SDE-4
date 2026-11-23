@@ -4,6 +4,7 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.config import settings
 from app.sessions import (
     SessionRepository,
     SessionState,
@@ -15,7 +16,12 @@ from app.config import Settings
 import app.sessions as sessions_module
 
 
-client = TestClient(app)
+client = TestClient(
+    app,
+    headers={
+        "X-Local-Auth": settings.local_auth_token,
+    },
+)
 
 
 # EXISTING API TESTS

@@ -1,4 +1,5 @@
 import ipaddress
+import secrets
 import time
 
 from threading import Lock
@@ -62,6 +63,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
 
         if request.url.path.startswith("/sessions"):
+
+            # Check local access
             if not self.is_local_request(request):
                 return self.error_response(
                     request,
@@ -70,6 +73,24 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                     "This endpoint is available only locally.",
                 )
 
+            # Check authentication key
+            provided_token = request.headers.get(
+                "X-Local-Auth",
+                "",
+            )
+
+            if not secrets.compare_digest(
+                provided_token,
+                settings.local_auth_token,
+            ):
+                return self.error_response(
+                    request,
+                    401,
+                    "LOCAL_AUTH_REQUIRED",
+                    "A valid local authentication key is required.",
+                )
+
+        # Rate limiting
         if (
             request.method == "POST"
             and request.url.path.endswith("/process")
