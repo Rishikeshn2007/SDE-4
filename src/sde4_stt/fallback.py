@@ -23,6 +23,7 @@ from academia_audio.schemas import AudioChunk
 
 from sde4_stt.adapters.base import BaseTranscriberAdapter
 from sde4_stt.adapters.fake_transcriber import FakeTranscriber
+from sde4_stt.logging import get_logger, log_fallback_event
 from sde4_stt.retry import NormalizedError
 from sde4_stt.schemas.transcript import (
     TranscriptError,
@@ -92,6 +93,7 @@ class FallbackAdapter(BaseTranscriberAdapter):
         self._language: str = "en"
         self._sample_rate: int = 16000
         self._buffered_chunks: List[tuple] = []
+        self._logger = get_logger("sde4_stt.fallback")
 
     @property
     def using_fallback(self) -> bool:
@@ -240,6 +242,13 @@ class FallbackAdapter(BaseTranscriberAdapter):
             return None
 
         self._using_fallback = True
+        log_fallback_event(
+            self._logger,
+            self._session_id or "unknown",
+            self._primary.provider_name,
+            self._fallback.provider_name,
+            f"Operation {operation} triggered fallback",
+        )
 
         # Emit a normalized notification that fallback was activated
         notification = TranscriptEvent(

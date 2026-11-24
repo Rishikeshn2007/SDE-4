@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Union
 
 from sde4_stt.adapters.base import BaseTranscriberAdapter
+from sde4_stt.logging import get_logger
 from sde4_stt.schemas.transcript import (
     TranscriptError,
     TranscriptEvent,
@@ -166,6 +167,7 @@ class RetryableAdapter(BaseTranscriberAdapter):
         self._inner = adapter
         self._config = config if config is not None else RetryConfig()
         self._executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
+        self._logger = get_logger("sde4_stt.retry")
 
     def _get_executor(self) -> concurrent.futures.ThreadPoolExecutor:
         """Lazily initialize a bounded managed worker thread pool."""
@@ -324,6 +326,13 @@ class RetryableAdapter(BaseTranscriberAdapter):
                     )
                     return [self._make_error_event(deadline_err, operation_name)]
 
+                self._logger.info(
+                    "Retrying operation '%s' (attempt %d/%d) after %.2fs backoff",
+                    operation_name,
+                    attempt + 1,
+                    config.max_retries,
+                    backoff,
+                )
                 time.sleep(backoff)
 
         # Defensive fallback

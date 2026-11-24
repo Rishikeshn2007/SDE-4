@@ -215,6 +215,47 @@ pip install -e ".[dev]"
 
 ---
 
+## Week 4: Release Hardening & Demonstration (Days 22–30)
+
+### Day 22–24 Deliverables: Latency Benchmarking & Performance Metrics
+- **Benchmarking CLI Utility** ([`benchmarks/benchmark_latency.py`](benchmarks/benchmark_latency.py)):
+  - Evaluates transcription latency under controlled synthetic audio fixtures without network calls.
+  - Automatically computes total iterations, min, max, mean, median (P50), P95, P99, and standard deviation.
+  - Persists JSON benchmark reports to `benchmarks/results/` for reproducible release validation.
+  ```bash
+  python benchmarks/benchmark_latency.py --iterations 50
+  ```
+
+### Day 25–27 Deliverables: Long-Session Reliability, Cancellation & Redacted Logging
+1. **Long-Session Consistency** ([`tests/test_long_session_reliability.py`](tests/test_long_session_reliability.py)):
+   - Verifies monotonic sequence ordering, zero duplicate finals, zero lost segments, and interim reconciliation over 50–100+ chunks.
+2. **Cancellation Consistency**:
+   - Verifies clean in-flight cancellation across processing stages without task leakage or cross-session state corruption.
+3. **Structured Redacted Logging** ([`src/sde4_stt/logging.py`](src/sde4_stt/logging.py), [`tests/test_redacted_logging.py`](tests/test_redacted_logging.py)):
+   - Implements `RedactedFilter` and `RedactedFormatter` ensuring zero leakage of spoken transcript text, raw PCM audio bytes, or API credentials into log streams.
+
+### Day 28–29 Deliverables: Provider Setup Guide, Known Limitations & Regression Fixtures
+- Comprehensive setup guide in [`docs/PROVIDER_SETUP.md`](docs/PROVIDER_SETUP.md).
+- Sample environment template in [`.env.example`](.env.example).
+- Deterministic regression fixtures in [`tests/test_regression_fixtures.py`](tests/test_regression_fixtures.py).
+
+### Day 30 Deliverable: Final Release Demonstration
+Run the Week 4 complete hardening and demonstration script:
+```bash
+python demo_w4.py
+```
+
+---
+
+## Known Limitations
+
+1. **Network Dependency for Real STT:** `RealSpeechTranscriber` requires outbound HTTPS access to Google Speech endpoints. Network drops automatically trigger `FallbackAdapter` to `FakeTranscriber`.
+2. **Estimated Word Timings on Web STT:** Google Web Speech API supplies plain text without word-level offsets; timings emitted in `RealSpeechTranscriber` are mathematically estimated across chunk boundaries rather than genuine phonetic alignments.
+3. **Chunked Buffering on HTTP STT:** Real provider operates via discrete request buffers on session finish rather than a full-duplex streaming gRPC connection.
+4. **Cancellation Bounds on Native Provider Calls:** While orchestrator loops cancel chunk processing immediately, synchronous in-flight network requests are abandoned and drained safely by thread executors.
+
+---
+
 ## Running Live Microphone STT & Demos
 
 ```bash
@@ -226,6 +267,12 @@ python demo_w2.py
 
 # Run Week 3 end-to-end integration demonstration (100% offline):
 python demo_w3.py
+
+# Run Week 4 final release demonstration (100% offline):
+python demo_w4.py
+
+# Run latency benchmarking utility:
+python benchmarks/benchmark_latency.py --iterations 50
 
 # List available audio input devices:
 python manual_text.py --list-devices
@@ -242,15 +289,12 @@ python manual_text.py --engine real --seconds 5
 ## Running the Complete Test Suite
 
 ```bash
-# Run all 223 unit and contract tests:
+# Run complete test suite (274 tests, 100% offline):
 python -m pytest -v
 
-# Run specific Week 2 test suites:
-python -m pytest tests/test_orchestrator.py -v
-python -m pytest tests/test_dedup.py -v
-python -m pytest tests/test_retry.py -v
-python -m pytest tests/test_preprocessing.py -v
-
-# Run Week 3 test suite only:
-python -m pytest tests/test_w3.py -v
+# Run Week 4 specific suites:
+python -m pytest tests/test_benchmarks.py -v
+python -m pytest tests/test_redacted_logging.py -v
+python -m pytest tests/test_long_session_reliability.py -v
+python -m pytest tests/test_regression_fixtures.py -v
 ```
