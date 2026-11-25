@@ -47,6 +47,9 @@ class FakeTranscriber(BaseTranscriberAdapter):
         fail_at_chunk_index: Optional[int] = None,
         error_code: str = "SIMULATED_STT_ERROR",
         bytes_per_second: int = 32000,  # e.g., 16000Hz * 16-bit mono = 32000 bytes/sec
+        confidence_threshold: float = 0.0,
+        revision_at_chunk_index: Optional[int] = None,
+        revised_words: Optional[List[str]] = None,
     ):
         super().__init__(provider_name="fake-deterministic-stt")
         self._canned_transcript = canned_transcript
@@ -56,6 +59,9 @@ class FakeTranscriber(BaseTranscriberAdapter):
         self._fail_at_chunk_index = fail_at_chunk_index
         self._error_code = error_code
         self._bytes_per_second = bytes_per_second
+        self._confidence_threshold = confidence_threshold
+        self._revision_at_chunk_index = revision_at_chunk_index
+        self._revised_words = revised_words
 
         # Session tracking state
         self._language = "en"
@@ -186,6 +192,27 @@ class FakeTranscriber(BaseTranscriberAdapter):
             self._is_active = False
             return [final_event, complete_event]
 
+        # Check for simulated revision emission
+        if self._revision_at_chunk_index is not None and current_chunk_idx == self._revision_at_chunk_index:
+            if self._revised_words:
+                self._accumulated_words = list(self._revised_words)
+            revised_segment = self._build_segment(
+                words=self._accumulated_words,
+                start_time=0.0,
+                end_time=round(end_t, 3),
+                sequence_number=seq,
+                is_final=False,
+            )
+            event_hash = hashlib.sha256(chunk_bytes).hexdigest()[:8]
+            revised_event = TranscriptEvent(
+                event_id=f"evt_{self._session_id}_revised_{seq}_{event_hash}",
+                session_id=self._session_id,
+                event_type=TranscriptEventType.REVISED,
+                timestamp=self._base_timestamp + end_t,
+                segment=revised_segment,
+            )
+            return [revised_event]
+
         # Otherwise emit INTERIM event
         interim_segment = self._build_segment(
             words=self._accumulated_words,
@@ -203,6 +230,20 @@ class FakeTranscriber(BaseTranscriberAdapter):
             segment=interim_segment,
         )
         return [interim_event]
+
+    def cancel(self) -> List[TranscriptEvent]:
+        """Cancel the active session and emit a CANCELLED event."""
+        if not self._is_active or self._session_id is None:
+            return []
+        self._is_active = False
+        return [
+            TranscriptEvent(
+                event_id=f"evt_{self._session_id}_cancelled",
+                session_id=self._session_id,
+                event_type=TranscriptEventType.CANCELLED,
+                timestamp=self._base_timestamp + self._accumulated_audio_duration,
+            )
+        ]
 
     def finish_session(self) -> List[TranscriptEvent]:
         """Closes the session, emitting final segment if pending, and a COMPLETE event."""

@@ -77,6 +77,7 @@ class EventDeduplicator:
         if et in (
             TranscriptEventType.START,
             TranscriptEventType.COMPLETE,
+            TranscriptEventType.CANCELLED,
             TranscriptEventType.ERROR,
         ):
             self._lifecycle_events.append(event)
@@ -92,6 +93,20 @@ class EventDeduplicator:
             if seq in self._final_by_sequence:
                 self._interims_reconciled += 1
                 return None
+            self._interim_by_sequence[seq] = event
+            return event
+
+        # REVISED – treat like INTERIM: cannot supersede a FINAL
+        if et == TranscriptEventType.REVISED:
+            seg = event.segment
+            if seg is None:
+                return event
+            seq = seg.sequence_number
+            # If a FINAL already committed for this sequence → suppress
+            if seq in self._final_by_sequence:
+                self._interims_reconciled += 1
+                return None
+            # REVISED supersedes any existing INTERIM for the same sequence
             self._interim_by_sequence[seq] = event
             return event
 
@@ -165,7 +180,10 @@ class EventDeduplicator:
                 starts.append(ev)
             elif ev.event_type == TranscriptEventType.COMPLETE:
                 completes.append(ev)
-            elif ev.event_type == TranscriptEventType.ERROR:
+            elif ev.event_type in (
+                TranscriptEventType.ERROR,
+                TranscriptEventType.CANCELLED,
+            ):
                 errors.append(ev)
 
         finals_sorted = [
@@ -201,3 +219,4 @@ class EventDeduplicator:
 
 
 __all__ = ["EventDeduplicator"]
+

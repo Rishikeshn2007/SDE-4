@@ -1,4 +1,4 @@
-﻿"""Tests for sde4_stt.retry ΓÇö timeout, bounded retries, error normalisation."""
+"""Tests for sde4_stt.retry — timeout, bounded retries, error normalisation."""
 
 import time
 import pytest
@@ -40,7 +40,7 @@ class TestNormalizedError:
 
 
 # ---------------------------------------------------------------------------
-# RetryableAdapter ΓÇö happy path
+# RetryableAdapter — happy path
 # ---------------------------------------------------------------------------
 
 class TestRetryableAdapterHappyPath:
@@ -70,7 +70,7 @@ class TestRetryableAdapterHappyPath:
 
 
 # ---------------------------------------------------------------------------
-# RetryableAdapter ΓÇö error normalisation
+# RetryableAdapter — error normalisation
 # ---------------------------------------------------------------------------
 
 class TestErrorNormalisation:
@@ -112,7 +112,7 @@ class TestErrorNormalisation:
 
 
 # ---------------------------------------------------------------------------
-# RetryableAdapter ΓÇö retry behaviour
+# RetryableAdapter — retry behaviour
 # ---------------------------------------------------------------------------
 
 class _FailNTimesAdapter(FakeTranscriber):
@@ -147,7 +147,7 @@ class TestRetryBehaviour:
         config = RetryConfig(max_retries=3, backoff_base_s=0.01)
         wrapped = RetryableAdapter(inner, config)
         events = wrapped.start_session("s1")
-        # ValueError is not recoverable ΓåÆ should fail immediately after 1 call
+        # ValueError is not recoverable → should fail immediately after 1 call
         assert inner._calls == 1
         assert events[0].event_type == TranscriptEventType.ERROR
         assert events[0].error.code == NormalizedError.INVALID_INPUT
@@ -318,3 +318,5 @@ class TestTimeoutEnforcement:
         assert wrapped._executor is not None
         wrapped.close()
         assert wrapped._executor is None
+
+
