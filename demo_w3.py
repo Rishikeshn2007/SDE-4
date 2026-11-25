@@ -22,7 +22,13 @@ import time
 from typing import Any, Dict, List
 
 from academia_audio.mock_source import MockMicrophone
-from workflow.schemas import WorkflowState
+
+try:
+    from workflow.schemas import WorkflowState
+    HAS_WORKFLOW = True
+except ImportError:
+    HAS_WORKFLOW = False
+    WorkflowState = None
 
 from sde4_stt.adapters.fake_transcriber import FakeTranscriber
 from sde4_stt.event_bridge import EventBridgePublisher
@@ -121,6 +127,10 @@ def main() -> None:
 
     # [8] Reasoning & [9] Workflow Plan Construction
     banner("STEP 8 & 9: Reasoning Layer Intent Extraction & Workflow Plan")
+    if not HAS_WORKFLOW:
+        print("[!] Note: Renuka's canonical workflow package is on main.")
+        print("[!] Steps 1-7 (Audio Chunks -> STT Orchestrator -> W5 Event Stream) completed successfully!")
+        return
     bridge = VoiceWorkflowBridge(event_publisher=publisher)
     plan = bridge.reason_and_plan(
         session_id=session_id,

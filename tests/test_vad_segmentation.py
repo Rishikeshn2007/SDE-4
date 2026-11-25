@@ -23,9 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from academia_audio.schemas import AudioChunk, AudioFormat
-from sde4_stt.vad import VADConfig
-
-from manual_text import segment_by_vad
+from sde4_stt.vad import VADConfig, segment_by_vad
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers

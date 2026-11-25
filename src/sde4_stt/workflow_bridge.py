@@ -18,14 +18,24 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from workflow.executor import execute_plan
-from workflow.schemas import (
-    ApprovalRequest,
-    WorkflowPlan,
-    WorkflowResult,
-    WorkflowState,
-    WorkflowStep,
-)
+try:
+    from workflow.executor import execute_plan
+    from workflow.schemas import (
+        ApprovalRequest,
+        WorkflowPlan,
+        WorkflowResult,
+        WorkflowState,
+        WorkflowStep,
+    )
+    HAS_WORKFLOW = True
+except ImportError:
+    HAS_WORKFLOW = False
+    execute_plan = None
+    ApprovalRequest = None
+    WorkflowPlan = None
+    WorkflowResult = None
+    WorkflowState = None
+    WorkflowStep = None
 
 from sde4_stt.event_bridge import EventBridgePublisher
 
@@ -79,6 +89,11 @@ class VoiceWorkflowBridge:
         Returns:
             A canonical ``WorkflowPlan`` containing one or more ``WorkflowStep`` objects.
         """
+        if not HAS_WORKFLOW:
+            raise RuntimeError(
+                "Renuka's workflow package is required for workflow planning. "
+                "The canonical package is located on main (workflow/)."
+            )
         text_lower = transcript_text.lower().strip()
         steps: List[WorkflowStep] = []
 
@@ -137,6 +152,11 @@ class VoiceWorkflowBridge:
         Returns:
             ``WorkflowResult`` containing state, outputs, or pending approval requests.
         """
+        if not HAS_WORKFLOW:
+            raise RuntimeError(
+                "Renuka's workflow package is required for workflow execution. "
+                "The canonical package is located on main (workflow/)."
+            )
         approvals = approvals or {}
         result = execute_plan(plan, approvals=approvals)
 
@@ -166,4 +186,4 @@ class VoiceWorkflowBridge:
         return result
 
 
-__all__ = ["VoiceWorkflowBridge", "CONSEQUENTIAL_KEYWORDS"]
+__all__ = ["VoiceWorkflowBridge", "CONSEQUENTIAL_KEYWORDS", "HAS_WORKFLOW"]

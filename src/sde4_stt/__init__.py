@@ -18,7 +18,14 @@ from sde4_stt.dedup import EventDeduplicator
 from sde4_stt.preprocessing import AudioPreprocessor
 from sde4_stt.retry import NormalizedError, RetryableAdapter, RetryConfig
 from sde4_stt.orchestrator import TranscriptionOrchestrator, TranscriptionResult
-from sde4_stt.vad import VADConfig, VADResult, VADState, VoiceActivityDetector
+from sde4_stt.vad import (
+    VADConfig,
+    VADResult,
+    VADState,
+    VoiceActivityDetector,
+    analyze_chunks_pcm,
+    segment_by_vad,
+)
 # W3 additions
 from sde4_stt.session import CancellationToken, SessionContext, SessionManager
 from sde4_stt.fallback import FallbackAdapter
@@ -50,6 +57,8 @@ __all__ = [
     "VADResult",
     "VADState",
     "VoiceActivityDetector",
+    "segment_by_vad",
+    "analyze_chunks_pcm",
     # Resiliency
     "RetryConfig",
     "NormalizedError",
