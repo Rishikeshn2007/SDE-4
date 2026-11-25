@@ -161,13 +161,13 @@ button:disabled {
   color: #34314a;
 }
 
-/* Footer */
 footer {
   padding: 20px 0;
-  color: #77728a;
+  color: #625b73;
   text-align: center;
   font-size: 16px;
 }
+
 
 /* Keyboard accessibility */
 .skip-link {
@@ -570,7 +570,7 @@ footer {
 }
 
 .session-indicator.inactive {
-  color: #64748b;
+  color: #59677a;
   background: #f1f5f9;
 }
 

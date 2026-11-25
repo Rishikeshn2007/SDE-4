@@ -355,9 +355,11 @@ startMockStream(0)
               </div>
 
               <div className="status-row">
-                <span>◷ Session Status</span>
-                <strong>{status}</strong>
-              </div>
+  <span>◷ Session Status</span>
+  <strong role="status" aria-live="polite" aria-atomic="true">
+    {status}
+  </strong>
+</div>
 
               <div className="status-row">
                 <span>▥ Transcript Events</span>

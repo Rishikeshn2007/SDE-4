@@ -114,3 +114,6 @@ The project includes tests for:
 This is a frontend mock-mode demonstration. Microphone permission is requested only through a separate user action, and the microphone stream is stopped immediately. No audio is recorded or uploaded.
 
 The screen context setting is a user preference; screen capture is not implemented. The backend mock session integration uses the FastAPI development server.
+## Troubleshooting
+
+For help with microphone permissions, backend connection issues, event stream reconnection, and demo mode, see the [Troubleshooting Guide](./TROUBLESHOOTING.md).
