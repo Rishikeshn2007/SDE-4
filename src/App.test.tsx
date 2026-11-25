@@ -1,4 +1,3 @@
-
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from './App'
@@ -15,11 +14,12 @@ describe('Session Studio', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the mock mode banner', () => {
+  it('shows the mock session notice', () => {
     render(<App />)
 
+    expect(screen.getByText(/Session Studio:/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/mock mode:/i),
+      screen.getByText(/Mock transcripts and optional microphone transcription/i),
     ).toBeInTheDocument()
   })
 })
