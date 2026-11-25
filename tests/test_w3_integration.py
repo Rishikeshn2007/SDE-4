@@ -340,12 +340,15 @@ def test_approval_gate_enforcement():
     assert res_pending.state == WorkflowState.AWAITING_APPROVAL
     assert res_pending.approval_request is not None
 
-    # 2. Explicit rejection -> remains not executed
+    # 2. Explicit rejection -> transitions to FAILED per canonical workflow contract
     res_rejected = bridge.execute(plan, session_id=session_id, approvals={step_id: False})
-    assert res_rejected.state == WorkflowState.AWAITING_APPROVAL
+    assert res_rejected.state == WorkflowState.FAILED
+    assert "Approval rejected" in (res_rejected.error or "")
 
     # 3. Explicit approval -> succeeds
-    res_approved = bridge.execute(plan, session_id=session_id, approvals={step_id: True})
+    plan_approved = bridge.reason_and_plan(session_id, "delete all temporary logs", force_consequential=True)
+    step_id_approved = plan_approved.steps[0].step_id
+    res_approved = bridge.execute(plan_approved, session_id=session_id, approvals={step_id_approved: True})
     assert res_approved.state == WorkflowState.SUCCEEDED
     assert len(res_approved.step_results) == 1
 

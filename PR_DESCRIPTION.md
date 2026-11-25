@@ -1,106 +1,89 @@
-# SDE-4: Speech-to-Text Pipeline – Complete W1 & W2 Implementation
+# SDE-4: Speech-to-Text Pipeline — Complete W1–W3 Implementation & Integration
 
 **Student:** Suresh V Patil  
 **Team:** SDE 4  
-**Workstream:** W1 (Foundation) & W2 (Orchestration & Resiliency)  
+**Workstream:** W1 (Audio Foundation), W2 (STT Orchestration & Resiliency), W3 (Session Management, Fallback & Workflow Integration)  
 **Branch:** `suresh` -> `main`  
 **PR URL:** https://github.com/Rishikeshn2007/SDE-4/pull/7  
+**Preserved Week 4 Branch:** `team/sde-4-voicebot` (commit `120fb10`)
 
 ---
 
 ## 1. Summary of Work
 
-This Pull Request delivers the complete Speech-to-Text (STT) workstream for the Academia AI Voice Co-Pilot:
-- **Week 1:** Foundational data contracts, provider-neutral adapter interface, deterministic mock transcriber, segment accumulation, and clean dependency isolation.
-- **Week 2:** Chunk-to-provider orchestration, event ordering and deduplication, interim/final reconciliation, bounded retries with genuine timeout enforcement, audio preprocessing (sinc-FIR downsampling, RMS normalization), and stateful Voice Activity Detection (VAD).
+This Pull Request delivers the complete Speech-to-Text (STT) workstream for the Academia AI Voice Co-Pilot covering Weeks 1 through 3, incorporating all code review remediations:
+- **Week 1:** Foundational data contracts (`academia_audio.schemas`, `sde4_stt.schemas.transcript`), provider-neutral adapter interface (`BaseTranscriberAdapter`), deterministic mock transcriber (`FakeTranscriber`), segment accumulation (`SegmentAccumulator`), and dependency isolation.
+- **Week 2:** Chunk-to-provider orchestration (`TranscriptionOrchestrator`), event ordering and deduplication (`EventDeduplicator`), interim/final reconciliation, bounded retries with genuine timeout enforcement (`RetryableAdapter`), audio preprocessing (resampling & RMS normalization), and stateful Voice Activity Detection (`VoiceActivityDetector`).
+- **Week 3 (Day 15–21):** Session management with cancellation token propagation (`SessionManager`, `CancellationToken`), primary-to-mock automatic fallback adapter (`FallbackAdapter`), W5 backend event stream publisher (`EventBridgePublisher`), and voice-to-workflow intent extraction and approval gate bridge (`VoiceWorkflowBridge`).
 
 ---
 
-## 2. Week 1 Deliverables & Review Fixes
+## 2. Review Remediations Addressed (Commits `d0bf5ee` & `ed816fe`)
 
-### Core Architecture
-- **Strict Data Contracts (`academia_audio.schemas`, `src/sde4_stt/schemas/transcript.py`):**
-  - Authoritative audio contracts (`AudioChunk`, `AudioFormat`, `AudioError`, `AudioErrorCode`).
-  - Strict Pydantic V2 transcript contracts (`TranscriptSegment`, `WordTiming`, `TranscriptError`, `TranscriptEvent`, `TranscriptEventType`) with timestamp ordering and BCP-47 language validation.
-- **Provider-Neutral Adapter Interface (`src/sde4_stt/adapters/base.py`):**
-  - Abstract base contract enforcing session lifecycle: `start_session` -> `process_chunk` -> `finish_session`.
-- **Deterministic Fake Transcriber (`src/sde4_stt/adapters/fake_transcriber.py`):**
-  - Zero-cost mock engine supporting canned scripts, chunk hashing, and simulated error injection without any API keys or network access.
-- **Segment Accumulation & Live Testing:**
-  - `SegmentAccumulator` (`src/sde4_stt/accumulator.py`) assembling ordered final utterances.
-  - Interactive live mic script (`manual_text.py`) and mock demo (`demo_stt.py`).
+### 1. Decoupled VAD from Microphone Dependencies
+- Moved reusable VAD algorithms (`segment_by_vad`, `analyze_chunks_pcm`) from `manual_text.py` into package module `src/sde4_stt/vad.py` and exported them in `src/sde4_stt/__init__.py`.
+- Replaced eager `import sounddevice as sd` in `manual_text.py` with lazy dynamic import via `get_sounddevice()` only invoked when live recording or device query flags are passed.
+- Updated `tests/test_vad_segmentation.py` to import directly from `sde4_stt.vad`. Zero PortAudio or `sounddevice` dependencies are required for test collection or execution.
 
-### Week 1 Code Review Fixes Implemented
-- [x] **Optional Real Provider:** `speech_recognition` is lazily imported inside `RealSpeechTranscriber.__init__()` and raises a clear `ImportError` if invoked without the optional package.
-- [x] **Clean Adapters Export:** `src/sde4_stt/adapters/__init__.py` strictly exports *only* `BaseTranscriberAdapter` and `FakeTranscriber`.
-- [x] **Isolated Dependencies in `pyproject.toml`:** `SpeechRecognition` and `sounddevice` are isolated under `[project.optional-dependencies]` as `google-stt`.
-- [x] **Single `AudioChunk` Schema:** Removed duplicate `schemas/audio.py` and reused canonical W1 `AudioChunk` from `academia_audio.schemas`.
-- [x] **Git Cleanup:** Removed `.venv-offline-test/` binaries from git tracking and added `.venv*` to `.gitignore`.
+### 2. Removed Duplicate Workflow Implementation
+- Removed the 5 duplicate files introduced in `workflow/` (`__init__.py`, `executor.py`, `mock_tools.py`, `schemas.py`, `state_machine.py`) that conflicted with Renuka's canonical workflow implementation on `main`.
+- Updated `VoiceWorkflowBridge` and integration tests to safely handle workflow dependency checks with clear diagnostic reporting (`HAS_WORKFLOW`), aligned with canonical workflow contracts (`WorkflowState.FAILED` upon approval rejection).
+
+### 3. Separated Week 3 and Week 4 Commits
+- Reverted Week 4 commit `120fb10` from `suresh` via clean revert commit `d0bf5ee` without force-pushing or rewriting shared history.
+- Verified that all Week 4 release hardening, latency benchmarking, and redacted logging deliverables remain 100% intact on `team/sde-4-voicebot` (and `origin/team/sde-4-voicebot`).
 
 ---
 
-## 3. Week 2 Deliverables Completed
+## 3. Week 1–3 Architectural Components
 
-### D8–9: Transcription Orchestrator (`src/sde4_stt/orchestrator.py`)
-- Coordinates the complete chunk-to-transcript pipeline.
-- Returns structured `TranscriptionResult` containing ordered segments, concatenated text, execution timings, duplicate suppression counts, and reconciled interim counts.
-- Exception boundaries guarantee no raw provider exceptions crash the pipeline.
-
-### D10–11: Ordering, De-duplication & Reconciliation (`src/sde4_stt/dedup.py`)
-- Built `EventDeduplicator` tracking processed `event_id`s to eliminate redundant events.
-- Reconciles non-final `INTERIM` hypotheses into immutable `FINAL` segments with strict chronological monotonicity.
-
-### D12–13: Timeouts, Bounded Retries & Error Normalization (`src/sde4_stt/retry.py`)
-- `RetryConfig`, `NormalizedError`, and `RetryableAdapter`.
-- Thread-safe timeout enforcement using `ThreadPoolExecutor` with cumulative session budget tracking.
-- Exponential backoff retry loop with configurable jitter and max attempts.
-- Normalizes third-party exceptions into typed `TranscriptError` models.
-
-### D12–13: Audio Preprocessing & Reusable VAD (`src/sde4_stt/preprocessing.py`, `src/sde4_stt/vad.py`)
-- **Audio Preprocessor:** Anti-aliasing sinc-FIR low-pass filter downsampling (e.g. 48 kHz -> 16 kHz), channel conversion (stereo <-> mono), and clipping-free RMS gain normalization.
-- **Voice Activity Detector:** Stateful `VoiceActivityDetector` tracking speech onset, silence trailing windows, and adaptive background noise estimation.
-
-### D14: Synthetic Demo & Contract Tests (`demo_w2.py`, `tests/`)
-- End-to-end runnable demo (`demo_w2.py`) executing a synthetic 48 kHz fixture preprocessed and transcribed with zero API keys.
-- Comprehensive contract test suites verifying all W1 and W2 components.
+| Component | Module | Description |
+|-----------|--------|-------------|
+| **Audio Schemas** | `academia_audio.schemas` | Authoritative `AudioChunk`, `AudioFormat`, `AudioError`, `AudioErrorCode` |
+| **Transcript Schemas** | `sde4_stt.schemas.transcript` | Strict Pydantic V2 `TranscriptSegment`, `TranscriptEvent`, `WordTiming` |
+| **Adapter Interface** | `sde4_stt.adapters.base` | `BaseTranscriberAdapter` enforcing lifecycle (`start_session`, `process_chunk`, `finish_session`) |
+| **Deterministic Mock** | `sde4_stt.adapters.fake_transcriber` | `FakeTranscriber` with canned transcripts, chunk hashing, and latency simulation |
+| **Real STT Adapter** | `sde4_stt.adapters.real_transcriber` | `RealSpeechTranscriber` with optional lazy `speech_recognition` import |
+| **Orchestrator** | `sde4_stt.orchestrator` | Chunk ordering, session context propagation, error boundary containment |
+| **Dedup & Reconciliation**| `sde4_stt.dedup` | `EventDeduplicator` eliminating redundant events and reconciling interim hypotheses |
+| **Resiliency & Retries**| `sde4_stt.retry` | `RetryableAdapter` with exponential backoff and timeout budget enforcement |
+| **Preprocessing & VAD** | `sde4_stt.preprocessing`, `sde4_stt.vad` | Sinc-FIR resampling, RMS normalization, stateful VAD, and offline acoustic analysis |
+| **Session Lifecycle** | `sde4_stt.session` | `SessionManager`, `SessionContext`, and thread-safe cooperative `CancellationToken` |
+| **Resilient Fallback** | `sde4_stt.fallback` | `FallbackAdapter` providing transparent fallback to mock on provider failure |
+| **W5 Event Bridge** | `sde4_stt.event_bridge` | `EventBridgePublisher` streaming structured events to downstream subscribers |
+| **Workflow Bridge** | `sde4_stt.workflow_bridge` | `VoiceWorkflowBridge` extracting intents, constructing plans, and enforcing approval gates |
 
 ---
 
-## 4. Acceptance Criteria Checklist
+## 4. Verification & Automated Test Results
 
-- [x] **Chunk to transcript events works end to end in mock mode:** Verified via `TranscriptionOrchestrator`, `demo_stt.py`, and `demo_w2.py`.
-- [x] **Out-of-order and duplicate segments handled correctly:** Reconciled into sorted final utterances.
-- [x] **Timeouts and bounded retries work:** Provider errors normalized into `TranscriptError` without crashing the pipeline.
-- [x] **Resampling and normalization tested:** Anti-aliasing sinc-FIR filter and RMS normalization fully covered.
-- [x] **Contract tests cover the adapter and events:** Default path requires no real provider or API key.
-- [x] **No duplicate schema definitions:** Authoritative W1 schemas strictly reused from `academia_audio.schemas`.
-- [x] **No recordings or secrets committed:** Clean git tree with zero audio artifacts or committed virtual environments.
-
----
-
-## 5. Automated Test Suite Results (199 Passed)
-
-Executed in a clean virtual environment with `pip install -e ".[dev]"` (no `SpeechRecognition` installed):
+All tests run 100% offline with zero internet access, zero API keys, and zero microphone requirements:
 
 ```text
 ============================= test session starts =============================
-platform win32 -- Python 3.12.8, pytest-9.2.0, pluggy-1.7.0
+platform win32 -- Python 3.12.8, pytest-8.3.4, pluggy-1.6.0
 rootdir: C:\Users\sures\Desktop\SDE-4
 configfile: pyproject.toml
-testpaths: tests
-collected 199 items
+plugins: anyio-4.15.1, flask-1.3.0
+collected 250 items
 
 tests/test_accumulator.py .....                                          [  2%]
-tests/test_adapters.py ...................                               [ 12%]
-tests/test_cli.py .....                                                  [ 14%]
-tests/test_dedup.py ...........                                          [ 20%]
-tests/test_orchestrator.py .....................                         [ 30%]
-tests/test_preprocessing.py ........................                     [ 42%]
-tests/test_retry.py .........................                            [ 55%]
-tests/test_schemas.py .................................................. [ 80%]
-.....                                                                    [ 82%]
-tests/test_source_and_chunker.py .......................                 [ 94%]
-tests/test_vad.py ...........                                            [100%]
+tests/test_adapters.py .....................                             [ 10%]
+tests/test_cli.py .....                                                  [ 12%]
+tests/test_dedup.py ...........                                          [ 16%]
+tests/test_orchestrator.py .....................                         [ 25%]
+tests/test_preprocessing.py .........................                    [ 35%]
+tests/test_retry.py .........................                            [ 45%]
+tests/test_schemas.py .................................................. [ 65%]
+.....                                                                    [ 67%]
+tests/test_source_and_chunker.py .......................                 [ 76%]
+tests/test_vad.py ...........                                            [ 80%]
+tests/test_vad_segmentation.py ................                          [ 87%]
+tests/test_w3.py ........................                                [ 96%]
+tests/test_w3_integration.py ........                                    [100%]
 
-============================= 199 passed in 0.70s =============================
+============================= 250 passed in 1.15s =============================
 ```
+
+- **Clean Environment Test Collection:** Verified with `sounddevice` and PortAudio masked/unavailable.
+- **Offline Demos:** `demo_w2.py` and `demo_w3.py` run 100% deterministically and pass all validation gates.
