@@ -221,3 +221,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Workflow runtime data
+audit_logs/
+checkpoints/

@@ -46,6 +46,12 @@ class AudioErrorCode(str, Enum):
     EMPTY_CHUNK = "empty_chunk"
     CORRUPT_CHUNK = "corrupt_chunk"
     OUT_OF_ORDER = "out_of_order"
+    PERMISSION_DENIED = "permission_denied"
+    DEVICE_UNSUPPORTED = "device_unsupported"
+    DEVICE_NOT_FOUND = "device_not_found"
+    ILLEGAL_STATE_TRANSITION = "illegal_state_transition"
+    BUFFER_OVERFLOW = "buffer_overflow"
+    AUDIO_GAP_DETECTED = "audio_gap_detected"
 
 
 class AudioError(Exception):

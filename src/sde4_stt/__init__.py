@@ -30,7 +30,12 @@ from sde4_stt.vad import (
 from sde4_stt.session import CancellationToken, SessionContext, SessionManager
 from sde4_stt.fallback import FallbackAdapter
 from sde4_stt.event_bridge import EventBridgePublisher, make_no_op_publisher
-from sde4_stt.workflow_bridge import VoiceWorkflowBridge
+try:
+    from sde4_stt.workflow_bridge import VoiceWorkflowBridge
+    HAS_WORKFLOW = True
+except ImportError:
+    HAS_WORKFLOW = False
+    VoiceWorkflowBridge = None  # type: ignore
 
 __version__ = "0.3.0"
 
