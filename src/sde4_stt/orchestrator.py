@@ -26,6 +26,12 @@ from academia_audio.schemas import AudioChunk
 from sde4_stt.adapters.base import BaseTranscriberAdapter
 from sde4_stt.adapters.fake_transcriber import FakeTranscriber
 from sde4_stt.dedup import EventDeduplicator
+from sde4_stt.logging import (
+    get_logger,
+    log_chunk_metric,
+    log_error_event,
+    log_session_lifecycle,
+)
 from sde4_stt.preprocessing import AudioPreprocessor
 from sde4_stt.retry import RetryableAdapter, RetryConfig
 from sde4_stt.schemas.transcript import (
@@ -126,6 +132,7 @@ class TranscriptionOrchestrator:
         self._cancellation_token = cancellation_token
         self._confidence_threshold = confidence_threshold
         self._event_publisher = event_publisher
+        self._logger = get_logger("sde4_stt.orchestrator")
 
     # ------------------------------------------------------------------
     # Public API
@@ -251,6 +258,13 @@ class TranscriptionOrchestrator:
             deduped_start = self._safe_dedup_process(start_events, session_id)
             all_events.extend(deduped_start)
             self._publish_events(deduped_start)
+            log_session_lifecycle(
+                self._logger,
+                session_id,
+                "START",
+                getattr(self._adapter, "provider_name", "unknown"),
+                {"chunks": len(chunk_list), "language": language},
+            )
         except Exception as exc:
             err_event = TranscriptEvent(
                 event_id=f"evt_{session_id}_err_start",
@@ -409,6 +423,14 @@ class TranscriptionOrchestrator:
             ordered_segments = self._deduplicator.get_ordered_finals()
 
         wall_elapsed = time.monotonic() - wall_start
+
+        log_session_lifecycle(
+            self._logger,
+            session_id,
+            "COMPLETE",
+            getattr(self._adapter, "provider_name", "unknown"),
+            {"chunks_processed": chunks_count, "finals": len(ordered_segments)},
+        )
 
         return TranscriptionResult(
             segments=ordered_segments,
