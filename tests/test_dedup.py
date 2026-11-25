@@ -1,4 +1,4 @@
-﻿"""Tests for sde4_stt.dedup ΓÇö ordering, deduplication & reconciliation."""
+"""Tests for sde4_stt.dedup — ordering, deduplication & reconciliation."""
 
 import pytest
 
@@ -188,3 +188,4 @@ class TestEdgeCases:
         kept = dedup.process_events([])
         assert kept == []
         assert dedup.get_ordered_finals() == []
+

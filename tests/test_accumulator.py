@@ -1,5 +1,5 @@
-﻿"""
-Unit tests for the ordered SegmentAccumulator (Day 5ΓÇæ6).
+"""
+Unit tests for the ordered SegmentAccumulator (Day 5‑6).
 """
 
 import pytest
@@ -129,3 +129,4 @@ class TestSegmentAccumulator:
         result = SegmentAccumulator.from_stream(events)
         assert isinstance(result, list)
         assert result[0].text == "hello"
+

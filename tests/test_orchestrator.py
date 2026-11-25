@@ -1,4 +1,4 @@
-﻿"""Tests for sde4_stt.orchestrator ΓÇö end-to-end contract tests."""
+"""Tests for sde4_stt.orchestrator — end-to-end contract tests."""
 
 import pytest
 
@@ -33,7 +33,7 @@ def _make_w1_chunks(n: int = 3, sample_rate: int = 16000) -> list[AudioChunk]:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: chunk ΓåÆ transcript in mock mode
+# End-to-end: chunk → transcript in mock mode
 # ---------------------------------------------------------------------------
 
 class TestEndToEnd:
@@ -168,7 +168,7 @@ class TestErrorHandling:
 
 
 # ---------------------------------------------------------------------------
-# Contract tests ΓÇö adapter interface
+# Contract tests — adapter interface
 # ---------------------------------------------------------------------------
 
 class TestAdapterContract:
@@ -201,7 +201,7 @@ class TestAdapterContract:
         assert seq_nums == sorted(seq_nums)
 
     def test_deterministic_output(self):
-        """Same input ΓåÆ identical output (determinism check)."""
+        """Same input → identical output (determinism check)."""
         adapter1 = FakeTranscriber(canned_transcript="deterministic")
         adapter2 = FakeTranscriber(canned_transcript="deterministic")
         orch1 = TranscriptionOrchestrator(adapter=adapter1)
@@ -323,3 +323,5 @@ class TestOrchestratorExceptionBoundaries:
         assert res.has_errors
         assert len(res.segments) == 0
         assert res.full_text == ""
+
+

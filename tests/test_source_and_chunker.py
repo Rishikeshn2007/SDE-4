@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from academia_audio import (
     AudioError,

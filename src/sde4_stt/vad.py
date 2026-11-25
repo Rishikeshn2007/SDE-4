@@ -233,9 +233,197 @@ class VoiceActivityDetector:
         )
 
 
+def segment_by_vad(
+    chunks: list[AudioChunk],
+    config: VADConfig,
+    merge_gap_s: float = 0.5,
+    min_segment_s: float = 1.5,
+) -> list[list[AudioChunk]]:
+    """Split captured AudioChunks into speech utterances with merging and filtering.
+
+    Three-stage pipeline:
+      1. VAD segmentation — raw SPEECH_START/SPEECH_END boundaries are found
+         using ``config``. A fresh VoiceActivityDetector is created so the
+         capture-time VAD state is not reused or corrupted.
+      2. Gap merging — adjacent raw segments whose silence gap is <= ``merge_gap_s``
+         are fused into one. This prevents normal breath pauses (~0.4s) from
+         creating spurious separate utterances and avoids submitting many tiny
+         STT requests.
+      3. Minimum-duration filter — merged segments shorter than ``min_segment_s``
+         are silently dropped. Google Web STT's free endpoint returns
+         ``UnknownValueError`` on very short audio (empirically < 1.5s); sending
+         sub-threshold segments wastes retry budget and degrades accuracy.
+
+    Args:
+        chunks:         Ordered list of AudioChunk objects from the capture loop.
+        config:         VADConfig for the segmentation pass.
+        merge_gap_s:    Max silence gap (seconds) between two raw segments that
+                        should be treated as one utterance. Default 0.5 s.
+        min_segment_s:  Minimum duration (seconds) for a final segment to be
+                        returned. Shorter segments are dropped. Default 1.5 s.
+
+    Returns:
+        List[List[AudioChunk]] — one inner list per kept utterance, in
+        chronological order. Empty list if no qualifying segments found.
+    """
+    if not chunks:
+        return []
+
+    vad = VoiceActivityDetector(config)
+
+    raw_segs: list[list[int]] = []
+    start_idx: int = -1
+    in_speech: bool = False
+
+    for idx, chunk in enumerate(chunks):
+        result = vad.process_chunk(chunk)
+        if result.transition == "SPEECH_START":
+            in_speech = True
+            start_idx = idx
+        elif in_speech:
+            if result.transition == "SPEECH_END":
+                raw_segs.append([start_idx, idx])
+                in_speech = False
+                start_idx = -1
+
+    # Flush utterance still in progress when recording ended during speech
+    if in_speech and start_idx >= 0:
+        raw_segs.append([start_idx, len(chunks) - 1])
+
+    if not raw_segs:
+        return []
+
+    # Merge adjacent segments whose gap <= merge_gap_s
+    merged: list[list[int]] = [raw_segs[0][:]]
+    for seg in raw_segs[1:]:
+        prev_end_chunk = chunks[merged[-1][1]]
+        prev_end_time = prev_end_chunk.timestamp_s + prev_end_chunk.duration_s
+        this_start_time = chunks[seg[0]].timestamp_s
+        gap = this_start_time - prev_end_time
+        if gap <= merge_gap_s:
+            merged[-1][1] = seg[1]
+        else:
+            merged.append(seg[:])
+
+    # Apply minimum duration filter
+    result_segs: list[list[AudioChunk]] = []
+    for start, end in merged:
+        seg_chunks = chunks[start : end + 1]
+        first = seg_chunks[0]
+        last = seg_chunks[-1]
+        dur = (last.timestamp_s + last.duration_s) - first.timestamp_s
+        if dur >= min_segment_s:
+            result_segs.append(seg_chunks)
+
+    return result_segs
+
+
+def analyze_chunks_pcm(chunks: list[AudioChunk]) -> dict:
+    """Perform detailed acoustic, amplitude, and clipping analysis on audio chunks.
+
+    Returns diagnostic metrics including:
+      - format (sample_rate, channels, bit_depth)
+      - timing (total_samples, duration_s)
+      - energy (RMS, dBFS)
+      - amplitude (peak_abs, peak_pct of full scale)
+      - saturation / clipping (exact saturated samples, near-saturated samples,
+        maximum consecutive saturated samples / flat-topping run length)
+      - health assessment based on genuine clipping detection rather than a
+        single near-maximum peak.
+    """
+    if not chunks:
+        return {}
+    sample_rate = chunks[0].format.sample_rate
+    channels = chunks[0].format.channels
+    sample_width = chunks[0].format.sample_width
+
+    all_data = b"".join(c.data for c in chunks)
+    n_samples = len(all_data) // sample_width
+    if n_samples == 0:
+        return {}
+
+    samples = array("h")
+    samples.frombytes(all_data)
+    if sys.byteorder == "big":
+        samples.byteswap()
+
+    sum_sq = 0.0
+    peak_abs = 0
+    exact_sat = 0
+    near_sat = 0
+    max_consecutive_sat = 0
+    cur_consecutive_sat = 0
+    non_zero = 0
+
+    for s in samples:
+        abs_s = abs(s)
+        if abs_s > peak_abs:
+            peak_abs = abs_s
+        if s != 0:
+            non_zero += 1
+        sum_sq += s * s
+
+        # Hard saturation in signed 16-bit PCM: ceiling (+32767) or floor (-32768)
+        if s >= 32767 or s <= -32768:
+            exact_sat += 1
+            cur_consecutive_sat += 1
+            if cur_consecutive_sat > max_consecutive_sat:
+                max_consecutive_sat = cur_consecutive_sat
+        else:
+            cur_consecutive_sat = 0
+
+        # Samples within ~2.3% of full scale
+        if abs_s >= 32000:
+            near_sat += 1
+
+    rms = math.sqrt(sum_sq / n_samples) / 32768.0
+    dbfs = 20.0 * math.log10(max(1e-9, rms))
+    peak_pct = (peak_abs / 32767.0) * 100.0
+    duration_s = n_samples / sample_rate
+
+    # True digital clipping produces flat-topped plateaus of consecutive saturated samples
+    if max_consecutive_sat >= 3 or exact_sat > 10:
+        assessment = (
+            f"GENUINE CLIPPING DETECTED: {exact_sat} saturated samples "
+            f"({max_consecutive_sat} max consecutive flat-topped samples)"
+        )
+        has_clipping = True
+    elif peak_abs > 32000:
+        assessment = (
+            f"HIGH INPUT LEVEL / CLEAN: Peak {peak_abs} ({peak_pct:.1f}% full scale), "
+            f"0 flat-topping (near-saturation: {near_sat} samples, {near_sat/n_samples*100.0:.2f}%)"
+        )
+        has_clipping = False
+    else:
+        assessment = f"HEALTHY DYNAMIC RANGE: Peak {peak_abs} ({peak_pct:.1f}% full scale)"
+        has_clipping = False
+
+    return {
+        "sample_rate": sample_rate,
+        "channels": channels,
+        "sample_width": sample_width,
+        "total_samples": n_samples,
+        "duration_s": round(duration_s, 3),
+        "rms": round(rms, 5),
+        "dbfs": round(dbfs, 2),
+        "peak_amplitude": peak_abs,
+        "peak_pct": round(peak_pct, 2),
+        "exact_saturated_samples": exact_sat,
+        "near_saturated_samples": near_sat,
+        "max_consecutive_saturated": max_consecutive_sat,
+        "non_zero_samples": non_zero,
+        "non_zero_pct": round(non_zero / n_samples * 100.0, 2),
+        "has_clipping": has_clipping,
+        "assessment": assessment,
+    }
+
+
 __all__ = [
     "VADState",
     "VADConfig",
     "VADResult",
     "VoiceActivityDetector",
+    "segment_by_vad",
+    "analyze_chunks_pcm",
 ]
+

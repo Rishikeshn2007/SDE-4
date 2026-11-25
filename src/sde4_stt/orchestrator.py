@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Union
 
 from academia_audio.schemas import AudioChunk
 
@@ -34,6 +34,10 @@ from sde4_stt.schemas.transcript import (
     TranscriptEventType,
     TranscriptSegment,
 )
+
+if TYPE_CHECKING:
+    from sde4_stt.event_bridge import EventBridgePublisher
+    from sde4_stt.session import CancellationToken
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +107,9 @@ class TranscriptionOrchestrator:
         adapter: Optional[BaseTranscriberAdapter] = None,
         preprocessor: Optional[AudioPreprocessor] = None,
         retry_config: Optional[RetryConfig] = None,
+        cancellation_token: Optional["CancellationToken"] = None,
+        confidence_threshold: float = 0.0,
+        event_publisher: Optional["EventBridgePublisher"] = None,
     ) -> None:
         base_adapter = adapter if adapter is not None else FakeTranscriber()
 
@@ -116,6 +123,9 @@ class TranscriptionOrchestrator:
 
         self._preprocessor = preprocessor
         self._deduplicator = EventDeduplicator()
+        self._cancellation_token = cancellation_token
+        self._confidence_threshold = confidence_threshold
+        self._event_publisher = event_publisher
 
     # ------------------------------------------------------------------
     # Public API
@@ -127,6 +137,8 @@ class TranscriptionOrchestrator:
         session_id: str,
         language: str = "en",
         sample_rate: int = 16000,
+        cancellation_token: Optional[CancellationToken] = None,
+        confidence_threshold: Optional[float] = None,
     ) -> TranscriptionResult:
         """Run the full transcription pipeline.
 
@@ -147,10 +159,17 @@ class TranscriptionOrchestrator:
             session_id:  Unique non-empty session identifier.
             language:    BCP-47 language code (default ``"en"``).
             sample_rate: Audio sample rate hint for the adapter.
+            cancellation_token: Optional cancellation token for this run.
+            confidence_threshold: Optional confidence threshold for this run.
 
         Returns:
             A ``TranscriptionResult`` containing ordered segments and metadata.
         """
+        if cancellation_token is not None:
+            self._cancellation_token = cancellation_token
+        if confidence_threshold is not None:
+            self._confidence_threshold = confidence_threshold
+
         self._deduplicator.reset()
         wall_start = time.monotonic()
         all_events: List[TranscriptEvent] = []
@@ -209,12 +228,29 @@ class TranscriptionOrchestrator:
                 interims_reconciled=self._deduplicator.num_interims_reconciled,
             )
 
+        # Sort chunks chronologically if sequence_id or timestamp_s are present (handles out-of-order)
+        if any(hasattr(c, "sequence_id") and getattr(c, "sequence_id") is not None for c in chunk_list):
+            chunk_list = sorted(
+                chunk_list,
+                key=lambda c: (
+                    getattr(c, "sequence_id", 0) if getattr(c, "sequence_id", None) is not None else 0,
+                    getattr(c, "timestamp_s", 0.0) if getattr(c, "timestamp_s", None) is not None else 0.0,
+                ),
+            )
+        elif any(hasattr(c, "timestamp_s") and getattr(c, "timestamp_s") is not None for c in chunk_list):
+            chunk_list = sorted(
+                chunk_list,
+                key=lambda c: getattr(c, "timestamp_s", 0.0) if getattr(c, "timestamp_s", None) is not None else 0.0,
+            )
+
         # Stage 2: Start session safely
         try:
             start_events = self._adapter.start_session(
                 session_id, language, sample_rate,
             )
-            all_events.extend(self._safe_dedup_process(start_events, session_id))
+            deduped_start = self._safe_dedup_process(start_events, session_id)
+            all_events.extend(deduped_start)
+            self._publish_events(deduped_start)
         except Exception as exc:
             err_event = TranscriptEvent(
                 event_id=f"evt_{session_id}_err_start",
@@ -227,7 +263,9 @@ class TranscriptionOrchestrator:
                     recoverable=False,
                 ),
             )
-            all_events.extend(self._safe_dedup_process([err_event], session_id))
+            deduped_err = self._safe_dedup_process([err_event], session_id)
+            all_events.extend(deduped_err)
+            self._publish_events(deduped_err)
             self._safe_cleanup_session()
             return TranscriptionResult(
                 segments=[],
@@ -241,7 +279,43 @@ class TranscriptionOrchestrator:
 
         # Stage 3: Process chunks
         for idx, chunk in enumerate(chunk_list):
-            if any(e.event_type == TranscriptEventType.ERROR for e in all_events):
+            # --- W3: Check cancellation before each chunk ---
+            if self._cancellation_token is not None and self._cancellation_token.is_cancelled:
+                cancel_events = []
+                try:
+                    cancel_events = self._adapter.cancel()
+                except Exception:
+                    # Fallback: emit CANCELLED event manually if adapter lacks cancel()
+                    cancel_events = [
+                        TranscriptEvent(
+                            event_id=f"evt_{session_id}_cancelled_{idx}",
+                            session_id=session_id,
+                            event_type=TranscriptEventType.CANCELLED,
+                            timestamp=time.time(),
+                        )
+                    ]
+                cancel_events = cancel_events or [
+                    TranscriptEvent(
+                        event_id=f"evt_{session_id}_cancelled_{idx}",
+                        session_id=session_id,
+                        event_type=TranscriptEventType.CANCELLED,
+                        timestamp=time.time(),
+                    )
+                ]
+                deduped_cancel = self._safe_dedup_process(cancel_events, session_id)
+                all_events.extend(deduped_cancel)
+                self._publish_events(deduped_cancel)
+                return TranscriptionResult(
+                    segments=[],
+                    events=all_events,
+                    session_id=session_id,
+                    duration_s=round(time.monotonic() - wall_start, 4),
+                    chunks_processed=chunks_count,
+                    duplicates_suppressed=self._deduplicator.num_duplicates_suppressed,
+                    interims_reconciled=self._deduplicator.num_interims_reconciled,
+                )
+
+            if self._has_fatal_error(all_events):
                 break
 
             is_last = idx == len(chunk_list) - 1
@@ -262,7 +336,9 @@ class TranscriptionOrchestrator:
                             recoverable=False,
                         ),
                     )
-                    all_events.extend(self._safe_dedup_process([err_event], session_id))
+                    deduped = self._safe_dedup_process([err_event], session_id)
+                    all_events.extend(deduped)
+                    self._publish_events(deduped)
                     self._safe_cleanup_session()
                     break
 
@@ -286,18 +362,29 @@ class TranscriptionOrchestrator:
                 )
                 chunk_events = [err_event]
 
-            all_events.extend(self._safe_dedup_process(chunk_events, session_id))
+            # --- W3: low-confidence flagging ---
+            extra_events = self._check_low_confidence(chunk_events, session_id)
+            chunk_events = chunk_events + extra_events
+
+            deduped_chunk = self._safe_dedup_process(chunk_events, session_id)
+            all_events.extend(deduped_chunk)
+            self._publish_events(deduped_chunk)
             chunks_count += 1
 
-            if any(e.event_type == TranscriptEventType.ERROR for e in chunk_events):
+            if self._has_fatal_error(chunk_events):
                 self._safe_cleanup_session()
                 break
 
         # Stage 4: Finish session (only if no error occurred)
-        if not any(e.event_type == TranscriptEventType.ERROR for e in all_events):
+        if not self._has_fatal_error(all_events):
             try:
                 finish_events = self._adapter.finish_session()
-                all_events.extend(self._safe_dedup_process(finish_events, session_id))
+                # W3: low-confidence flagging on finish events as well
+                extra_events = self._check_low_confidence(finish_events, session_id)
+                finish_events = finish_events + extra_events
+                deduped_finish = self._safe_dedup_process(finish_events, session_id)
+                all_events.extend(deduped_finish)
+                self._publish_events(deduped_finish)
             except Exception as exc:
                 err_event = TranscriptEvent(
                     event_id=f"evt_{session_id}_err_finish",
@@ -310,11 +397,13 @@ class TranscriptionOrchestrator:
                         recoverable=False,
                     ),
                 )
-                all_events.extend(self._safe_dedup_process([err_event], session_id))
+                deduped_err = self._safe_dedup_process([err_event], session_id)
+                all_events.extend(deduped_err)
+                self._publish_events(deduped_err)
                 self._safe_cleanup_session()
 
         # Stage 5: Ordered finals (only if pipeline did not fail with error)
-        if any(e.event_type == TranscriptEventType.ERROR for e in all_events):
+        if self._has_fatal_error(all_events):
             ordered_segments = []
         else:
             ordered_segments = self._deduplicator.get_ordered_finals()
@@ -366,6 +455,66 @@ class TranscriptionOrchestrator:
                 self._adapter.close()
             except Exception:
                 pass
+
+    @staticmethod
+    def _has_fatal_error(events: List[TranscriptEvent]) -> bool:
+        """Return True if any event in the list represents an unrecoverable ERROR."""
+        return any(
+            e.event_type == TranscriptEventType.ERROR
+            and (e.error is None or not e.error.recoverable)
+            for e in events
+        )
+
+    def _publish_events(self, events: List[TranscriptEvent]) -> None:
+        """Forward events to the event publisher if one is configured."""
+        if self._event_publisher is not None:
+            self._event_publisher.publish_many(events)
+
+    def _check_low_confidence(
+        self,
+        events: List[TranscriptEvent],
+        session_id: str,
+    ) -> List[TranscriptEvent]:
+        """Return additional ERROR events for low-confidence FINAL segments.
+
+        When ``confidence_threshold > 0`` and a FINAL segment's confidence
+        falls below the threshold, an extra ERROR event is emitted alongside
+        the FINAL event so consumers can act on it.  The FINAL itself is NOT
+        suppressed.
+        """
+        if self._confidence_threshold <= 0.0:
+            return []
+
+        extra: List[TranscriptEvent] = []
+        for event in events:
+            if (
+                event.event_type == TranscriptEventType.FINAL
+                and event.segment is not None
+                and event.segment.confidence < self._confidence_threshold
+            ):
+                extra.append(
+                    TranscriptEvent(
+                        event_id=f"evt_{session_id}_low_conf_{event.segment.segment_id}",
+                        session_id=session_id,
+                        event_type=TranscriptEventType.ERROR,
+                        timestamp=time.time(),
+                        error=TranscriptError(
+                            code="LOW_CONFIDENCE",
+                            message=(
+                                f"Segment '{event.segment.segment_id}' confidence "
+                                f"{event.segment.confidence:.3f} is below threshold "
+                                f"{self._confidence_threshold:.3f}."
+                            ),
+                            recoverable=True,
+                            details={
+                                "segment_id": event.segment.segment_id,
+                                "confidence": event.segment.confidence,
+                                "threshold": self._confidence_threshold,
+                            },
+                        ),
+                    )
+                )
+        return extra
 
     # ------------------------------------------------------------------
     # Convenience properties

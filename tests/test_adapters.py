@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for Day 3-4: BaseTranscriberAdapter and Deterministic FakeTranscriber.
 """
 
@@ -42,7 +42,7 @@ class TestFakeTranscriber:
     def test_lifecycle_events_progression(self):
         """Verifies START -> INTERIM -> FINAL -> COMPLETE lifecycle."""
         transcriber = FakeTranscriber(canned_transcript="Explain this error")
-
+        
         # 1. Start
         start_events = transcriber.start_session("sess_001")
         assert len(start_events) == 1
@@ -68,7 +68,7 @@ class TestFakeTranscriber:
         """When audio stream ends without is_last flag, finish_session flushes final event."""
         transcriber = FakeTranscriber(canned_transcript="Run unit tests")
         transcriber.start_session("sess_002")
-
+        
         chunk = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x01\x00" * 6400)
         interim = transcriber.process_chunk(chunk)
         assert interim[0].event_type == TranscriptEventType.INTERIM
@@ -84,7 +84,7 @@ class TestFakeTranscriber:
         """Transcriber accepts raw bytes in addition to AudioChunk."""
         transcriber = FakeTranscriber()
         transcriber.start_session("sess_bytes")
-
+        
         raw_pcm = b"\x00\x01" * 16000  # 1 second of 16kHz 16-bit mono
         events = transcriber.process_chunk(raw_pcm)
         assert len(events) == 1
@@ -246,7 +246,7 @@ class TestRealSpeechTranscriberIntegration:
     # -----------------------------------------------------------------------
 
     def test_process_chunk_never_emits_interim_events(self, mock_sr):
-        """process_chunk() must always return [] ΓÇö no fabricated INTERIM events."""
+        """process_chunk() must always return [] — no fabricated INTERIM events."""
         from sde4_stt.adapters.real_transcriber import RealSpeechTranscriber
 
         adapter = RealSpeechTranscriber()
@@ -281,7 +281,7 @@ class TestRealSpeechTranscriberIntegration:
 
         monkeypatch.setattr(adapter._recognizer, "recognize_google", counting_recognize)
 
-        # Feed two chunks ΓÇö no recognition should happen yet
+        # Feed two chunks — no recognition should happen yet
         for i in range(2):
             adapter.process_chunk(
                 AudioChunk(sequence_id=i, timestamp_s=i * 0.1, format=FMT, data=b"\x00\x01" * 800)
@@ -318,7 +318,7 @@ class TestRealSpeechTranscriberIntegration:
         for wt in final_event.segment.words:
             assert wt.confidence is None, (
                 f"Word '{wt.word}' has confidence={wt.confidence!r}; "
-                "recognize_google() does not supply word confidences ΓÇö must be None."
+                "recognize_google() does not supply word confidences — must be None."
             )
 
     def test_segment_confidence_is_schema_default_not_fabricated(self, mock_sr, monkeypatch):
@@ -339,7 +339,7 @@ class TestRealSpeechTranscriberIntegration:
         final_event = next(e for e in events if e.event_type == TranscriptEventType.FINAL)
         # Must not be 0.95 (the former fabricated value).
         assert final_event.segment.confidence != 0.95, (
-            "Segment confidence is 0.95 ΓÇö this is a fabricated value not supplied "
+            "Segment confidence is 0.95 — this is a fabricated value not supplied "
             "by recognize_google(). Use the schema default (1.0) instead."
         )
         # Must equal the schema default (1.0).
@@ -383,7 +383,59 @@ class TestRealSpeechTranscriberIntegration:
         result = adapter.process_chunk(chunk, is_last=True)
         assert result == [], (
             "process_chunk(is_last=True) returned events; "
-            "is_last is ignored ΓÇö explicit finish_session() is required."
+            "is_last is ignored — explicit finish_session() is required."
         )
         # Session should still be active (finish_session not called)
         assert adapter.is_active
+
+    def test_cancel_discards_buffer_and_emits_cancelled(self, mock_sr):
+        """RealSpeechTranscriber.cancel() must clear audio buffer, mark session inactive, and emit CANCELLED."""
+        from sde4_stt.adapters.real_transcriber import RealSpeechTranscriber
+
+        adapter = RealSpeechTranscriber()
+        adapter.start_session("sess_cancel_real")
+        chunk = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x00\x00" * 800)
+        adapter.process_chunk(chunk)
+        assert len(adapter._audio_buffer) == 1600
+        assert adapter.is_active
+
+        events = adapter.cancel()
+        assert len(events) == 1
+        assert events[0].event_type == TranscriptEventType.CANCELLED
+        assert events[0].session_id == "sess_cancel_real"
+        assert len(adapter._audio_buffer) == 0
+        assert not adapter.is_active
+
+        # Repeated cancellation is a safe no-op
+        assert adapter.cancel() == []
+
+        # Chunks cannot be processed after cancellation
+        with pytest.raises(RuntimeError, match="Cannot process chunks without an active session"):
+            adapter.process_chunk(chunk)
+
+        # No FINAL event can be emitted after cancellation
+        with pytest.raises(RuntimeError, match="Session is not active"):
+            adapter.finish_session()
+
+    def test_cancel_after_finalization(self, mock_sr, monkeypatch):
+        """Calling cancel after finish_session() is a safe no-op."""
+        from sde4_stt.adapters.real_transcriber import RealSpeechTranscriber
+
+        adapter = RealSpeechTranscriber()
+        monkeypatch.setattr(
+            adapter._recognizer,
+            "recognize_google",
+            lambda audio_data, language="en-US": "sample recognized text",
+        )
+        adapter.start_session("sess_cancel_after_fin")
+        chunk = AudioChunk(sequence_id=0, timestamp_s=0.0, format=FMT, data=b"\x00\x00" * 800)
+        adapter.process_chunk(chunk)
+        finish_events = adapter.finish_session()
+        assert any(e.event_type == TranscriptEventType.FINAL for e in finish_events)
+        assert not adapter.is_active
+
+        # Cancel on already finished session returns []
+        cancel_events = adapter.cancel()
+        assert cancel_events == []
+        assert len(adapter._audio_buffer) == 0
+
