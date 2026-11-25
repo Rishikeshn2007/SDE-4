@@ -24,10 +24,8 @@ from sde4_stt.session import CancellationToken, SessionContext, SessionManager
 from sde4_stt.fallback import FallbackAdapter
 from sde4_stt.event_bridge import EventBridgePublisher, make_no_op_publisher
 from sde4_stt.workflow_bridge import VoiceWorkflowBridge
-# W4 additions: Redacted Logging
-from sde4_stt.logging import RedactedFilter, RedactedFormatter, get_logger
 
-__version__ = "0.4.0"
+__version__ = "0.3.0"
 
 __all__ = [
     # Schemas (authoritative W1 audio + W2 transcript)
@@ -70,9 +68,5 @@ __all__ = [
     "make_no_op_publisher",
     # W3: Workflow bridge
     "VoiceWorkflowBridge",
-    # W4: Redacted logging
-    "get_logger",
-    "RedactedFilter",
-    "RedactedFormatter",
 ]
 
