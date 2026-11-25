@@ -1,169 +1,97 @@
-# SDE-4 – Context and Reasoning Voicebot
+# SDE-4 - Context and Reasoning Voicebot
 
-## Project Overview
+## Overview
+A context-aware reasoning project that uses synthetic context, source-grounded answers, consent controls, privacy safeguards, and confirmation-gated workflow proposals.
 
-This project develops a context-aware reasoning system that processes synthetic context information, generates grounded answers, and prepares safe workflow proposals.
-
-The project is developed in three stages: Week 1, Week 2, and Week 3.
-
-The system uses mock implementations and synthetic data for development and testing.
-
-## Week 1 – Context and Reasoning Foundation
-
-- Defined reusable context schemas.
-- Created source references and context items.
-- Implemented reasoning requests and results.
-- Developed deterministic mock reasoning.
-- Added validation and unit tests.
-
-## Week 2 – Capture Adapter, Context Builder and LLM Adapter
-
-- Implemented opt-in capture adapter interfaces.
-- Added synthetic frame processing.
-- Created bounded context selection.
-- Implemented recency and relevance filtering.
-- Added stale context filtering.
-- Developed a mock LLM adapter.
-- Added timeout, retry, and structured validation tests.
-
-## Week 3 – Source-Linked Observations and Workflow Handoff
-
-### Days 15–16: Observation Management
-
-- Created timestamped observations.
-- Linked observations to their original sources.
-- Added stale observation filtering.
-- Added duplicate observation handling.
-- Implemented consent management.
-- Added pending-context clearing when consent is withdrawn.
-
-### Days 17–18: Grounded Answers
-
-- Generated answers using available context.
-- Included source IDs in reasoning results.
-- Added explicit no-evidence responses.
-- Prevented answers from being based on unsupported information.
-
-### Days 19–20: Prompt Injection Protection and Workflow Handoff
-
-- Treated captured context as untrusted data.
-- Created a validated WorkflowProposal schema.
-- Added workflow proposal planning.
-- Implemented mock workflow handoff.
-- Required explicit confirmation.
-- Prevented automatic workflow execution.
-
-### Day 21: Integration
-
-- Integrated observations and consent management.
-- Connected grounded answer generation.
-- Integrated workflow proposal creation and handoff.
-- Created a synthetic integration demo.
+## Week 4 Deliverables
+- Golden reasoning tests for evidence, source references, no-evidence cases, and prompt injection.
+- Privacy redaction for recognized emails, tokens, and secret assignments.
+- Consent withdrawal and pending-observation clearing.
+- Per-stage latency tracking.
+- Prompt-version metadata.
+- Data-handling and retention documentation.
+- Automated backend tests and frontend build through GitHub Actions.
 
 ## Project Structure
+- `adapters/` - Synthetic capture and vision adapters.
+- `backend/` - Flask API.
+- `docs/` - Data-handling documentation.
+- `examples/` - Integration, latency, and failure demonstrations.
+- `observations/` - Consent, latency, and privacy utilities.
+- `prompts/` - Prompt version tracking.
+- `reasoning/` - Grounded and mock reasoning.
+- `schemas/` - Context and workflow schemas.
+- `tests/` - Unit, integration, and golden tests.
+- `frontend/` - React and TypeScript application.
 
-```text
-SDE-4/
-│
-├── adapters/
-│   ├── capture.py
-│   └── vision.py
-│
-├── context_builder/
-│   └── builder.py
-│
-├── examples/
-│   ├── demo.py
-│   ├── synthetic_frames.py
-│   └── week3_demo.py
-│
-├── llm/
-│   └── client.py
-│
-├── observations/
-│   ├── observation_builder.py
-│   └── consent_manager.py
-│
-├── prompts/
-│   └── prompt_v1.json
-│
-├── reasoning/
-│   ├── mock_reasoning.py
-│   └── grounded_answer.py
-│
-├── schemas/
-│   ├── context.py
-│   └── workflow.py
-│
-├── workflow/
-│   ├── planner.py
-│   └── handoff.py
-│
-├── tests/
-│   ├── test_schemas.py
-│   ├── test_reasoning.py
-│   ├── test_week2.py
-│   ├── test_week3_observations.py
-│   ├── test_week3_grounded_answers.py
-│   └── test_week3_workflow.py
-│
-├── README.md
-└── .gitignore
-```
+## Setup
 
-## Technologies Used
+Install Python dependencies:
 
-- Python
-- Dataclasses
-- Unit Testing
-- Mock Reasoning
-- Synthetic Context Data
-- Context Validation
+    python -m pip install -r requirements.txt
 
-## Running the Project
+Install frontend dependencies:
 
-### Run the Week 3 Integration Demo
+    npm.cmd ci
 
-```bash
-python -m examples.week3_demo
-```
+## Demonstrations
 
-### Run the Complete Test Suite
+Normal integration:
 
-```bash
-python -m unittest discover -s tests -v
-```
+    python -m examples.week3_demo
 
-## Testing
+No-evidence failure case:
 
-The project has been developed with automated unit tests covering:
+    python -m examples.week4_failure_demo
 
-- Schema validation
-- Reasoning functionality
-- Context building
-- Observation timestamps
-- Stale and duplicate observation filtering
-- Consent management
-- Grounded answers
-- Source references
-- No-evidence responses
-- Workflow proposal validation
-- Mock workflow handoff
+Latency demonstration:
 
-The latest reported test count is 60 tests.
+    python -m examples.latency_demo
 
-## Safety and Privacy
+The latency demonstration uses artificial delays. Its measurements are illustrative, not production benchmarks.
 
-- Capture remains disabled by default.
-- Only synthetic data is used in the integration demo.
-- Context content is treated as untrusted data.
-- Answers are grounded in available context.
-- Workflow proposals require confirmation.
-- Workflow actions are not automatically executed.
-- No external LLM provider or API key is required for the mock demo.
+## Backend Tests
 
-## Conclusion
+Run all backend tests:
 
-The SDE-4 Context and Reasoning project demonstrates a modular approach to context processing, evidence-based answers, and safe workflow handoff.
+    python -m unittest discover -s tests -v
 
-The three development stages establish a foundation for a context-aware voice assistant with source-linked information and controlled workflow proposals.
+Run golden tests separately:
+
+    python -m unittest tests.golden.test_golden_reasoning -v
+
+## Frontend Build
+
+    npm.cmd run build
+
+## Privacy and Safety
+- Capture is disabled by default.
+- The capture adapter accepts synthetic frames only.
+- Consent withdrawal disables capture and clears pending observations held by the consent manager.
+- Redaction is pattern-based and cannot guarantee detection of every secret.
+- Context is treated as untrusted input.
+- Workflow proposals require explicit confirmation.
+- Approval does not execute a real-world action.
+
+See `docs/DATA_HANDLING.md` for retention behavior and limitations.
+
+See `docs/LATENCY_REPORT.md` for the recorded per-stage latency demonstration
+and its measurement limitations.
+
+## Known Limitations
+- No real screen capture is implemented.
+- Reasoning and workflow demonstrations use mock components.
+- In-memory clearing is not secure erasure.
+- Prompt metadata is not stored in a persistent audit database.
+- Latency measurements are illustrative.
+- Production deployment requires a separate security and privacy review.
+
+## Local Verification - 25 November 2026
+- Backend test suite: 132 tests passed.
+- Golden tests: 9 passed.
+- Latency demonstration: completed.
+- Week 3 integration demonstration: completed.
+- Frontend installation: completed, zero reported vulnerabilities.
+- Frontend production build: passed.
+
+These are local results. GitHub Actions must also pass on the submitted branch.

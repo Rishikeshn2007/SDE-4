@@ -1,10 +1,12 @@
-"""Mock-first LLM adapter with timeout, retry and output validation."""
+﻿"""Mock-first LLM adapter with timeout, retry, privacy and output validation."""
 
+import copy
 import queue
 import re
 import threading
 
 from schemas.context import ReasoningRequest, ReasoningResult
+from observations.privacy_redactor import PrivacyRedactor
 
 
 class MockLLMClient:
@@ -45,7 +47,7 @@ class LLMAdapter:
         self.max_output_length = max_output_length
 
     def validate_output(self, output, request):
-        """Validate the structure, sources and basic output safety."""
+        """Validate structure, source references and output safety."""
 
         if not isinstance(output, dict):
             raise ValueError("LLM output must be a dictionary")
@@ -77,7 +79,6 @@ class LLMAdapter:
         ):
             raise ValueError("Answer contains invalid control characters")
 
-        # Reject potentially executable markup in generated answers.
         unsafe_pattern = r"<\s*(script|iframe|object|embed)\b|javascript\s*:"
 
         if re.search(unsafe_pattern, answer, re.IGNORECASE):
@@ -106,9 +107,11 @@ class LLMAdapter:
         if output["status"] != "success":
             raise ValueError("Invalid result status")
 
-        result = ReasoningResult(**output)
-        result.validate()
+        safe_output = dict(output)
+        safe_output["answer"] = PrivacyRedactor.redact(answer)
 
+        result = ReasoningResult(**safe_output)
+        result.validate()
         return result
 
     def _call_with_timeout(self, request):
@@ -138,16 +141,24 @@ class LLMAdapter:
         return value
 
     def generate(self, request):
-        """Generate a validated response with bounded timeout retries."""
+        """Redact a copy of the request, then generate a validated response."""
 
         if not isinstance(request, ReasoningRequest):
             raise ValueError("Expected a ReasoningRequest")
 
         request.validate()
 
+        safe_request = copy.deepcopy(request)
+        safe_request.question = PrivacyRedactor.redact(
+            safe_request.question
+        )
+
+        for item in safe_request.context.items:
+            item.content = PrivacyRedactor.redact(item.content)
+
         for attempt in range(self.max_retries + 1):
             try:
-                output = self._call_with_timeout(request)
+                output = self._call_with_timeout(safe_request)
                 return self.validate_output(output, request)
 
             except TimeoutError:

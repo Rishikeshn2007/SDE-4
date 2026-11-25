@@ -1,9 +1,11 @@
-"""Deterministic mock reasoning using a versioned prompt."""
+﻿"""Deterministic mock reasoning using a versioned prompt."""
 
 import json
 from pathlib import Path
 
 from schemas.context import ReasoningRequest, ReasoningResult
+from observations.privacy_redactor import PrivacyRedactor
+from prompts.prompt_version import PromptVersionRegistry
 
 
 PROMPT_PATH = (
@@ -12,9 +14,11 @@ PROMPT_PATH = (
     / "prompt_v1.json"
 )
 
+PROMPT_VERSION_REGISTRY = PromptVersionRegistry()
+
 
 def load_prompt() -> dict:
-    """Load and validate the versioned prompt specification."""
+    """Load, validate, and register the versioned prompt specification."""
 
     with PROMPT_PATH.open("r", encoding="utf-8") as prompt_file:
         prompt = json.load(prompt_file)
@@ -22,6 +26,7 @@ def load_prompt() -> dict:
     required_fields = {
         "prompt_name",
         "version",
+        "description",
         "trusted_instructions",
         "input_fields",
         "output_format",
@@ -45,6 +50,13 @@ def load_prompt() -> dict:
             "Each trusted instruction must be a non-empty string"
         )
 
+    version = prompt["version"]
+    if PROMPT_VERSION_REGISTRY.get(version) is None:
+        PROMPT_VERSION_REGISTRY.register(
+            version,
+            prompt["description"],
+        )
+
     return prompt
 
 
@@ -52,17 +64,16 @@ def process_request(request: ReasoningRequest) -> ReasoningResult:
     """
     Process a reasoning request using the supplied context.
 
-    The versioned prompt provides the trusted instructions.
-    This mock implementation remains deterministic and does not
-    execute context text as instructions.
+    Context is treated as untrusted data and redacted before it is
+    included in the generated answer.
     """
 
+    if not isinstance(request, ReasoningRequest):
+        raise ValueError("Expected a ReasoningRequest")
+
     request.validate()
+    load_prompt()
 
-    # Load the prompt specification before processing the request.
-    prompt = load_prompt()
-
-    # Return a predictable answer when no context is available.
     if not request.context.items:
         result = ReasoningResult(
             request_id=request.request_id,
@@ -73,17 +84,16 @@ def process_request(request: ReasoningRequest) -> ReasoningResult:
         result.validate()
         return result
 
-    # Collect context information in the supplied order.
     context_parts = []
     source_ids = []
 
     for item in request.context.items:
-        context_parts.append(item.content)
+        safe_content = PrivacyRedactor.redact(item.content)
+        context_parts.append(safe_content)
 
         if item.source.source_id not in source_ids:
             source_ids.append(item.source.source_id)
 
-    # Generate a predictable response from the supplied context.
     answer = "Context: " + " ".join(context_parts)
 
     result = ReasoningResult(

@@ -7,6 +7,7 @@ screen content must never be treated as commands.
 import re
 
 from schemas.context import ReasoningRequest, ReasoningResult
+from observations.privacy_redactor import PrivacyRedactor
 
 
 class GroundedAnswerGenerator:
@@ -85,8 +86,11 @@ class GroundedAnswerGenerator:
 
         request.validate()
 
-        # Do not process questions containing common injection patterns.
-        if self._contains_injection(request.question):
+        # Redact sensitive information before processing the question.
+        safe_question = PrivacyRedactor.redact(request.question)
+
+        # Check the sanitized question for instruction injection.
+        if self._contains_injection(safe_question):
             result = ReasoningResult(
                 request_id=request.request_id,
                 answer=self.NO_EVIDENCE_MESSAGE,
@@ -96,7 +100,7 @@ class GroundedAnswerGenerator:
             result.validate()
             return result
 
-        question_words = self._get_keywords(request.question)
+        question_words = self._get_keywords(safe_question)
 
         broad_question = not question_words
         asks_about_language = "language" in question_words
@@ -105,12 +109,14 @@ class GroundedAnswerGenerator:
 
         for item in request.context.items:
 
+            # Redact sensitive information before processing context.
+            safe_content = PrivacyRedactor.redact(item.content)
+
             # Treat screen content as untrusted data.
-            # Exclude content containing common injection patterns.
-            if self._contains_injection(item.content):
+            if self._contains_injection(safe_content):
                 continue
 
-            content_words = self._get_keywords(item.content)
+            content_words = self._get_keywords(safe_content)
 
             has_keyword_match = bool(
                 question_words.intersection(content_words)
@@ -124,7 +130,7 @@ class GroundedAnswerGenerator:
             )
 
             if broad_question or has_keyword_match or has_language_match:
-                matching_items.append(item)
+                matching_items.append((item, safe_content))
 
         if not matching_items:
             result = ReasoningResult(
@@ -139,8 +145,8 @@ class GroundedAnswerGenerator:
         evidence = []
         source_ids = []
 
-        for item in matching_items:
-            evidence.append(item.content.strip())
+        for item, safe_content in matching_items:
+            evidence.append(safe_content.strip())
 
             source_id = item.source.source_id
 

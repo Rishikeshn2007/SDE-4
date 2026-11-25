@@ -17,6 +17,7 @@ from reasoning.grounded_answer import GroundedAnswerGenerator
 from workflow.planner import WorkflowPlanner
 from workflow.handoff import WorkflowHandoff
 from observations.consent_manager import ConsentManager
+from adapters.capture import CaptureAdapter
 
 from speech.routes import speech_blueprint
 
@@ -28,7 +29,8 @@ app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 answer_generator = GroundedAnswerGenerator()
 workflow_planner = WorkflowPlanner()
 workflow_handoff = WorkflowHandoff()
-consent_manager = ConsentManager()
+capture_adapter = CaptureAdapter(opt_in=False)
+consent_manager = ConsentManager(capture_adapter=capture_adapter)
 
 app.register_blueprint(speech_blueprint)
 
@@ -160,6 +162,7 @@ def enable_consent():
 @app.route("/api/consent/withdraw", methods=["POST"])
 def withdraw_consent():
     consent_manager.withdraw_consent()
+    workflow_handoff.clear()
 
     return jsonify({
         "status": "success",
