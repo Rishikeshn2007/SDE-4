@@ -302,3 +302,120 @@ def test_oversized_api_request_returns_413_with_correlation_id():
     assert error["code"] == "PAYLOAD_TOO_LARGE"
     assert error["correlation_id"] == correlation_id
     assert error["retryable"] is False
+# WEEK 4 - MALFORMED REQUEST TESTS
+
+def test_invalid_json_request():
+    response = client.post(
+        "/sessions",
+        content="{invalid json",
+        headers={
+            "Content-Type": "application/json",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_missing_required_state_field():
+    created = client.post(
+        "/sessions",
+        json={"mode": "mock"},
+    )
+
+    session_id = created.json()["session_id"]
+
+    response = client.patch(
+        f"/sessions/{session_id}/state",
+        json={},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_invalid_session_state_value():
+    created = client.post(
+        "/sessions",
+        json={"mode": "mock"},
+    )
+
+    session_id = created.json()["session_id"]
+
+    response = client.patch(
+        f"/sessions/{session_id}/state",
+        json={"state": "unknown"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+# WEEK 4 - EVENT RECONNECTION TESTS
+
+def test_reconnect_receives_only_missed_events():
+    session_id = "week4-reconnect-test"
+
+    add_event(session_id, "event_one", {"number": 1})
+    add_event(session_id, "event_two", {"number": 2})
+    add_event(session_id, "event_three", {"number": 3})
+
+    response = client.get(
+        f"/sessions/{session_id}/events",
+        headers={"Last-Event-ID": "2"},
+    )
+
+    assert response.status_code == 200
+
+    content = response.text
+
+    assert "event_three" in content
+    assert "event_one" not in content
+    assert "event_two" not in content
+
+
+def test_reconnect_with_latest_event_id_returns_no_duplicates():
+    session_id = "week4-reconnect-latest"
+
+    add_event(session_id, "event_one", {"number": 1})
+    add_event(session_id, "event_two", {"number": 2})
+
+    response = client.get(
+        f"/sessions/{session_id}/events",
+        headers={"Last-Event-ID": "2"},
+    )
+
+    assert response.status_code == 200
+    assert "event_one" not in response.text
+    assert "event_two" not in response.text
+
+
+def test_reconnect_rejects_negative_event_id():
+    session_id = "week4-reconnect-negative"
+
+    add_event(session_id, "event_one", {"number": 1})
+
+    response = client.get(
+        f"/sessions/{session_id}/events",
+        headers={"Last-Event-ID": "-1"},
+    )
+
+    assert response.status_code == 400
+# WEEK 4 - LOG HYGIENE TEST
+
+def test_sensitive_data_is_redacted_from_logs():
+    import logging
+    from app.logging_config import JSONFormatter
+
+    record = logging.LogRecord(
+        "security_test",
+        logging.INFO,
+        "",
+        0,
+        "X-Local-Auth: secret123",
+        (),
+        None,
+    )
+
+    output = JSONFormatter().format(record)
+
+    assert "secret123" not in output
+    assert "[REDACTED]" in output

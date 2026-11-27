@@ -31,10 +31,32 @@ class Session(BaseModel):
 class CreateSessionRequest(BaseModel):
     mode: str = "mock"
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "mode": "mock"
+                }
+            ]
+        }
+    }
+
 
 class UpdateSessionStateRequest(BaseModel):
     state: SessionState
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "state": "active"
+                },
+                {
+                    "state": "paused"
+                }
+            ]
+        }
+    }
 
 # Define permitted transitions from each state.
 ALLOWED_TRANSITIONS = {
