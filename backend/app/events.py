@@ -76,9 +76,10 @@ async def stream_events(
     last_event_id: int = Header(
         default=0,
         alias="Last-Event-ID",
+        description="Return only events with an ID greater than this value.",
+        examples=[0, 1, 5],
     ),
 ):
-
     if last_event_id < 0:
         raise HTTPException(
             status_code=400,
