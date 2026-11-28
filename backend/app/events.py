@@ -45,7 +45,32 @@ def add_event(session_id: str, event_type: str, data: dict):
     return event
 
 
-@router.get("/sessions/{session_id}/events")
+@router.get(
+    "/sessions/{session_id}/events",
+    summary="Stream Events",
+    description="Stream session events using Server-Sent Events. Use Last-Event-ID to receive only events that have not yet been received.",
+    responses={
+        200: {
+            "description": "Session events streamed successfully.",
+            "content": {
+                "text/event-stream": {
+                    "example": (
+                        "id: 1\n"
+                        "event: session_created\n"
+                        'data: {"id": 1, "session_id": "123e4567-e89b-12d3-a456-426614174000", '
+                        '"event_type": "session_created", "data": {"state": "created"}}\n\n'
+                    )
+                }
+            }
+        },
+        400: {
+            "description": "Invalid event ID."
+        },
+        404: {
+            "description": "No events found for this session."
+        }
+    }
+)
 async def stream_events(
     session_id: str,
     last_event_id: int = Header(

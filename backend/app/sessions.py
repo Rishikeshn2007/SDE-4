@@ -27,6 +27,19 @@ class Session(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                    "state": "created",
+                    "created_at": "2026-11-28T10:00:00+00:00",
+                    "updated_at": "2026-11-28T10:00:00+00:00",
+                }
+            ]
+        }
+    }
+
 
 class CreateSessionRequest(BaseModel):
     mode: str = "mock"
@@ -34,9 +47,7 @@ class CreateSessionRequest(BaseModel):
     model_config = {
         "json_schema_extra": {
             "examples": [
-                {
-                    "mode": "mock"
-                }
+                {"mode": "mock"}
             ]
         }
     }
@@ -48,15 +59,12 @@ class UpdateSessionStateRequest(BaseModel):
     model_config = {
         "json_schema_extra": {
             "examples": [
-                {
-                    "state": "active"
-                },
-                {
-                    "state": "paused"
-                }
+                {"state": "active"},
+                {"state": "paused"},
             ]
         }
     }
+
 
 # Define permitted transitions from each state.
 ALLOWED_TRANSITIONS = {

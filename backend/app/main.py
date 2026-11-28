@@ -160,7 +160,24 @@ async def validation_exception_handler(
 
 
 # Root endpoint
-@app.get("/")
+@app.get(
+    "/",
+    summary="Root",
+    description="Check whether the backend application is running.",
+    responses={
+        200: {
+            "description": "Backend is running.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "name": "SDE-4 Voicebot Backend",
+                        "status": "running"
+                    }
+                }
+            }
+        }
+    }
+)
 async def root():
 
     return {
@@ -170,7 +187,45 @@ async def root():
 
 
 # Health endpoint
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Health",
+    description="Check the health of all backend gateway modules.",
+    responses={
+        200: {
+            "description": "Health status of all modules.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "healthy",
+                        "modules": {
+                            "audio": {
+                                "module": "audio",
+                                "status": "healthy",
+                                "mode": "mock"
+                            },
+                            "transcription": {
+                                "module": "transcription",
+                                "status": "healthy",
+                                "mode": "mock"
+                            },
+                            "reasoning": {
+                                "module": "reasoning",
+                                "status": "healthy",
+                                "mode": "mock"
+                            },
+                            "workflow": {
+                                "module": "workflow",
+                                "status": "healthy",
+                                "mode": "mock"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def health():
     modules = {
         "audio": audio_gateway.health(),
@@ -190,14 +245,50 @@ async def health():
     }
 
 # Readiness endpoint
-@app.get("/ready")
+@app.get(
+    "/ready",
+    summary="Readiness",
+    description="Check whether the backend is ready to accept requests.",
+    responses={
+        200: {
+            "description": "Backend is ready.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "ready"
+                    }
+                }
+            }
+        }
+    }
+)
 async def readiness():
 
     return {"status": "ready"}
 
 
 # Create session with idempotency
-@app.post("/sessions", status_code=201)
+@app.post(
+    "/sessions",
+    status_code=201,
+    summary="Create Session",
+    description="Create a new mock voicebot session.",
+    responses={
+        201: {
+            "description": "Session created successfully.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "state": "created",
+                        "created_at": "2026-11-28T10:00:00+00:00",
+                        "updated_at": "2026-11-28T10:00:00+00:00"
+                    }
+                }
+            }
+        }
+    }
+)
 async def create_session(
     payload: CreateSessionRequest,
     idempotency_key: str | None = Header(
@@ -257,7 +348,26 @@ async def create_session(
 
 
 # Get session
-@app.get("/sessions/{session_id}")
+@app.get(
+    "/sessions/{session_id}",
+    summary="Get Session",
+    description="Retrieve an existing session using its session ID.",
+    responses={
+        200: {
+            "description": "Session retrieved successfully.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "state": "active",
+                        "created_at": "2026-11-28T10:00:00+00:00",
+                        "updated_at": "2026-11-28T10:05:00+00:00"
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_session(
     session_id: str,
     request: Request,
@@ -277,7 +387,26 @@ async def get_session(
 
 
 # Update session state
-@app.patch("/sessions/{session_id}/state")
+@app.patch(
+    "/sessions/{session_id}/state",
+    summary="Update Session State",
+    description="Change the state of an existing session.",
+    responses={
+        200: {
+            "description": "Session state updated successfully.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "state": "active",
+                        "created_at": "2026-11-28T10:00:00+00:00",
+                        "updated_at": "2026-11-28T10:05:00+00:00"
+                    }
+                }
+            }
+        }
+    }
+)
 async def update_session_state(
     session_id: str,
     payload: UpdateSessionStateRequest,
@@ -323,7 +452,26 @@ async def update_session_state(
 
 
 # Stop session
-@app.post("/sessions/{session_id}/stop")
+@app.post(
+    "/sessions/{session_id}/stop",
+    summary="Stop Session",
+    description="Stop an existing session and mark it completed.",
+    responses={
+        200: {
+            "description": "Session stopped successfully.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "state": "completed",
+                        "created_at": "2026-11-28T10:00:00+00:00",
+                        "updated_at": "2026-11-28T10:10:00+00:00"
+                    }
+                }
+            }
+        }
+    }
+)
 async def stop_session(
     session_id: str,
     request: Request,
@@ -373,7 +521,48 @@ async def stop_session(
 
 
 # Process session through all module gateways
-@app.post("/sessions/{session_id}/process")
+@app.post(
+    "/sessions/{session_id}/process",
+    summary="Process Session",
+    description="Process a session through audio, transcription, reasoning and workflow gateways.",
+    responses={
+        200: {
+            "description": "Mock pipeline completed successfully.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "correlation_id": "abc-123",
+                        "status": "success",
+                        "mode": "mock",
+                        "modules": [
+                            {
+                                "module": "audio",
+                                "status": "success",
+                                "message": "Mock audio received"
+                            },
+                            {
+                                "module": "transcription",
+                                "status": "success",
+                                "transcript": "Hello, this is a mock voice input."
+                            },
+                            {
+                                "module": "reasoning",
+                                "status": "success",
+                                "intent": "general_query"
+                            },
+                            {
+                                "module": "workflow",
+                                "status": "success",
+                                "result": "Mock workflow completed."
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def process_session(
     session_id: str,
     request: Request,
